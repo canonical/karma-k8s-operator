@@ -1,0 +1,6 @@
+#!/bin/sh -e
+# Copyright 2021 Xav Paice
+# See LICENSE file for licensing details.
+
+tox -e lint
+tox -e unit

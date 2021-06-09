@@ -1,0 +1,8 @@
+-r requirements.txt
+coverage
+flake8
+black
+flake8-docstrings
+flake8-import-order
+pep8-naming
+flake8-colors

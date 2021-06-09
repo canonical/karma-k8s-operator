@@ -1,0 +1,28 @@
+# Copyright 2021 Xav Paice
+# See LICENSE file for licensing details.
+name: alertmanager-karma
+description: |
+  TEMPLATE-TODO: fill out the charm's description
+summary: |
+  TEMPLATE-TODO: fill out the charm's summary
+
+containers:
+  karma:
+    resource: karma-image
+    mounts:
+      - storage: config
+        location: /srv
+
+storage:
+  config:
+    type: filesystem
+    location: /srv
+
+resources:
+  karma-image:
+    type: oci-image
+    description: OCI image for karma (ghcr.io/prymitive/karma:latest)
+
+requires:
+  ingress:
+    interface: ingress
