@@ -1,14 +1,11 @@
 # Copyright 2021 Xav Paice
 # See LICENSE file for licensing details.
-#
-# TEMPLATE-TODO: change this example to suit your needs.
-# If you don't need a config, you can remove the file entirely.
-# It ties in to the example _on_config_changed handler in src/charm.py
-#
-# Learn more about config at: https://juju.is/docs/sdk/config
 
 options:
-  alertmanager-uri:
-    default: 'https://alertmanager.demo.do.prometheus.io'
-    description: The remote Alertmanager URL to monitor
+  alertmanager-servers:
+    default: 'AlertmanagerDemo https://alertmanager.demo.do.prometheus.io,RobustPerception http://demo.robustperception.io:9093'
+    description: |
+      List of Alertmanager hosts to connect to with a name for each.  Format is
+      name1:uri1,name2:uri2, i.e. name and uri are space separated, and each entry
+      is comma separated.  At least one entry is required.
     type: string

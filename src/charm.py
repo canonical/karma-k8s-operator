@@ -13,6 +13,7 @@ develop a new k8s charm using the Operator Framework:
 """
 
 import logging
+from urllib.parse import urlparse
 
 import requests
 import yaml
@@ -20,7 +21,7 @@ from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, UnknownStatus
+from ops.model import ActiveStatus, BlockedStatus, UnknownStatus
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
@@ -36,7 +37,6 @@ class AlertmanagerKarmaCharm(CharmBase):
         super().__init__(*args)
         self.framework.observe(self.on.karma_pebble_ready, self._on_karma_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.framework.observe(self.on.fortune_action, self._on_fortune_action)
         self._stored.set_default(things=[])
         self.port = 8080
         self.service_hostname = "karma.juju"
@@ -60,9 +60,7 @@ class AlertmanagerKarmaCharm(CharmBase):
                     "override": "replace",
                     "summary": "karma",
                     "startup": "enabled",
-                    "command": "/karma --alertmanager.uri {}".format(
-                        self.model.config["alertmanager-uri"]
-                    ),
+                    "command": "/karma",
                     "environment": {
                         "CONFIG_FILE": self.config_file,
                     },
@@ -73,15 +71,7 @@ class AlertmanagerKarmaCharm(CharmBase):
         return pebble_layer
 
     def _on_karma_pebble_ready(self, event):
-        """Define and start a workload using the Pebble API.
-
-        TEMPLATE-TODO: change this example to suit your needs.
-        You'll need to specify the right entrypoint and environment
-        configuration for your specific workload. Tip: you can see the
-        standard entrypoint of an existing container using docker inspect
-
-        Learn more about Pebble layers at https://github.com/canonical/pebble
-        """
+        """Define and start a workload using the Pebble API."""
         # Get a reference the container attribute on the PebbleReadyEvent
         container = event.workload
         # Define an initial Pebble layer configuration
@@ -122,16 +112,47 @@ class AlertmanagerKarmaCharm(CharmBase):
 
     def _write_config_file(self):
         """Write out a config file."""
+        servers = []
+
+        for server in self.model.config["alertmanager-servers"].split(","):
+            # TODO deal with errors like multiple whitespace
+            try:
+                name, uri = server.split(" ")
+            except ValueError as e:
+                self.unit.status = BlockedStatus(
+                    message="Loading alertmanager-servers failed"
+                )
+                logging.error(f"Loading alertmanager-servers failed with: {e}")
+
+                return False
+            # check the uri looks like a uri
+            try:
+                parsed_uri = urlparse(uri)
+            except Exception as e:
+                self.unit.status = BlockedStatus(
+                    message="Loading alertmanager-servers failed"
+                )
+                logging.error(f"Loading alertmanager-servers failed with: {e}")
+
+                return False
+
+            if not all([parsed_uri.scheme, parsed_uri.netloc]):
+                self.unit.status = BlockedStatus(
+                    message=f"URI setting {uri} is invalid"
+                )
+                logging.error(f"URI setting {uri} is invalid")
+            servers.append({"name": name, "uri": uri, "proxy": True})
+
         config = {
             "alertmanager": {
-                "servers": [
-                    {"name": "test", "uri": self.model.config["alertmanager-uri"]}
-                ]
+                "servers": servers,
             },
             "listen": {"port": self.port},
         }
         with open(self.config_file, "w") as f:
             f.write(yaml.dump(config))
+
+        return True
 
     def _restart_service(self, container, service):
         """Perform a service restart on the container."""
@@ -147,25 +168,6 @@ class AlertmanagerKarmaCharm(CharmBase):
             self.unit.status = ActiveStatus()
         else:
             self.unit.status = UnknownStatus()
-
-    def _on_fortune_action(self, event):
-        """Just an example to show how to receive actions.
-
-        TEMPLATE-TODO: change this example to suit your needs.
-        If you don't need to handle actions, you can remove this method,
-        the hook created in __init__.py for it, the corresponding test,
-        and the actions.py file.
-
-        Learn more about actions at https://juju.is/docs/sdk/actions
-        """
-        fail = event.params["fail"]
-
-        if fail:
-            event.fail(fail)
-        else:
-            event.set_results(
-                {"fortune": "A bug in the code is worth two in the documentation."}
-            )
 
 
 if __name__ == "__main__":

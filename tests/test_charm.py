@@ -35,8 +35,8 @@ class TestCharm(unittest.TestCase):
     @unittest.mock.patch.object(AlertmanagerKarmaCharm, "_check_karma_service_alive")
     def test_config_changed(self, mock_check_karma):
         mock_check_karma.return_value = True
-        alertmanager_uri = "http://1.2.3.4:1234"
-        self.harness.update_config({"alertmanager-uri": alertmanager_uri})
+        alertmanager_servers = "test http://1.2.3.4:1234"
+        self.harness.update_config({"alertmanager-servers": alertmanager_servers})
         updated_plan = self.harness.get_container_pebble_plan("karma").to_dict()
         expected_plan = {
             "services": {
@@ -44,7 +44,7 @@ class TestCharm(unittest.TestCase):
                     "override": "replace",
                     "summary": "karma",
                     "startup": "enabled",
-                    "command": f"/karma --alertmanager.uri {alertmanager_uri}",
+                    "command": "/karma",
                     "environment": {
                         "CONFIG_FILE": self.harness.charm.config_file,
                     },
@@ -55,21 +55,8 @@ class TestCharm(unittest.TestCase):
         # read the config file, check the uri is changed
         with open(self.harness.charm.config_file, "r") as f:
             written_config = f.read()
-        self.assertTrue(alertmanager_uri in written_config)
+        self.assertTrue("http://1.2.3.4:1234" in written_config)
         self._check_services_running("karma")
-
-    def test_action(self):
-        # the harness doesn't (yet!) help much with actions themselves
-        action_event = Mock(params={"fail": ""})
-        self.harness.charm._on_fortune_action(action_event)
-
-        self.assertTrue(action_event.set_results.called)
-
-    def test_action_fail(self):
-        action_event = Mock(params={"fail": "fail this"})
-        self.harness.charm._on_fortune_action(action_event)
-
-        self.assertEqual(action_event.fail.call_args, [("fail this",)])
 
     @unittest.mock.patch.object(requests.Session, "get")
     def test_check_karma_service_alive(self, mock_requests):
@@ -93,8 +80,7 @@ class TestCharm(unittest.TestCase):
                     "override": "replace",
                     "summary": "karma",
                     "startup": "enabled",
-                    "command": "/karma --alertmanager.uri "
-                    "https://alertmanager.demo.do.prometheus.io",
+                    "command": "/karma",
                     "environment": {
                         "CONFIG_FILE": self.harness.charm.config_file,
                     },
