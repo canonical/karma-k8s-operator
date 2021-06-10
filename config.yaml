@@ -2,10 +2,9 @@
 # See LICENSE file for licensing details.
 
 options:
-  alertmanager-servers:
-    default: 'AlertmanagerDemo https://alertmanager.demo.do.prometheus.io,RobustPerception http://demo.robustperception.io:9093'
-    description: |
-      List of Alertmanager hosts to connect to with a name for each.  Format is
-      name1:uri1,name2:uri2, i.e. name and uri are space separated, and each entry
-      is comma separated.  At least one entry is required.
+  external-hostname:
+    default: ""
+    description: >
+      The external hostname this application should be available on. If unset,
+      it will default to the deployed application name in the model.
     type: string

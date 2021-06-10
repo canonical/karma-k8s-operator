@@ -2,9 +2,11 @@
 # See LICENSE file for licensing details.
 name: alertmanager-karma
 description: |
-  TEMPLATE-TODO: fill out the charm's description
+  Alertmanager UI is useful for browsing alerts and managing silences, but it's
+  lacking as a dashboard tool - karma aims to fill this gap.  This charm deploys
+  and manages Karma in a Kubernetes environment.
 summary: |
-  TEMPLATE-TODO: fill out the charm's summary
+  Aggregator and alternative UI for Alertmanager.
 
 containers:
   karma:
@@ -26,3 +28,5 @@ resources:
 requires:
   ingress:
     interface: ingress
+  karma:
+    interface: karma

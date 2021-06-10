@@ -11,16 +11,18 @@ See [the Karma source](https://github.com/prymitive/karma) for the details on Ka
 ## Usage
 
 To use Karma, you need to have at least one Alertmanager instance that you wish
-to view.  These need to be configured via the alertmanager-servers configuration
-item.
+to view.  These need to be either related to Karma using the 'karma' relation,
+or you can use the alertmanager-karma-proxy charm configured to point to a
+remote Alertmanager instance, and relate that to alertmanager-karma.
 
 Example deployment:
 
 ```bash
-juju deploy ./alertmanager-karma.charm --resource karma-image=ghcr.io/prymitive/karma:v0.86 \
-  --config alertmanager-servers='AlertmanagerDemo https://alertmanager.demo.do.prometheus.io,RobustPerception http://demo.robustperception.io:9093'
+juju deploy ./alertmanager-karma.charm --resource karma-image=ghcr.io/prymitive/karma:v0.86
+juju deploy alertmanager-karma-proxy
 juju deploy nginx-ingress-integrator
 juju relate alertmanager-karma nginx-ingress-integrator
+juju relate alertmanager-karma-proxy alertmanager-karma
 ```
 
 ## Developing
@@ -52,10 +54,10 @@ tox -e unit
 ## Roadmap
 
 * Tests:
-  * Check for invalid config strings
+  * Add relation to the tests
   * review coverage
-* TLS support for UI
+  * Add karma.py to tests
+* TLS support for UI -> ideally certificates via relation to easyrsa or similar
 * TLS client auth
 * Authentication (TLS UI is a prerequisite)
-* Relation to Alertmanager
 * Functional tests

@@ -13,10 +13,10 @@ develop a new k8s charm using the Operator Framework:
 """
 
 import logging
-from urllib.parse import urlparse
 
 import requests
 import yaml
+from charms.alertmanager_karma.v0.karma import KarmaCharmEvents, KarmaRequires
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -25,6 +25,9 @@ from ops.model import ActiveStatus, BlockedStatus, UnknownStatus
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
+# from urllib.parse import urlparse
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,14 +35,18 @@ class AlertmanagerKarmaCharm(CharmBase):
     """Charm the service."""
 
     _stored = StoredState()
+    on = KarmaCharmEvents()
 
     def __init__(self, *args):
         super().__init__(*args)
         self.framework.observe(self.on.karma_pebble_ready, self._on_karma_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self._stored.set_default(things=[])
+        self.karma = KarmaRequires(self)
+        self.framework.observe(self.on.karma_available, self._on_config_changed)
+
+        self._stored.set_default(servers={})
         self.port = 8080
-        self.service_hostname = "karma.juju"
+        self.service_hostname = self._external_hostname
         self.config_file = "/srv/karma.yaml"
         self.ingress = IngressRequires(
             self,
@@ -49,6 +56,15 @@ class AlertmanagerKarmaCharm(CharmBase):
                 "service-port": self.port,
             },
         )
+
+    @property
+    def _external_hostname(self):
+        """Return the external hostname to be passed to ingress via the relation."""
+        # It is recommended to default to `self.app.name` so that the external
+        # hostname will correspond to the deployed application name in the
+        # model, but allow it to be set to something specific via config.
+
+        return self.config["external-hostname"] or f"{self.app.name}.juju"
 
     def _karma_layer(self):
         """Returns the Pebble configuration layer for Karma."""
@@ -77,8 +93,11 @@ class AlertmanagerKarmaCharm(CharmBase):
         # Define an initial Pebble layer configuration
         # Add intial Pebble config layer using the Pebble API
         container.add_layer("karma", self._karma_layer(), combine=True)
-        self._write_config_file()
-        self._restart_service(container, "karma")
+        config = self._get_config_file()
+
+        if config:
+            container.push(self.config_file, config)
+            self._restart_service(container, "karma")
 
     def _check_karma_service_alive(self) -> bool:
         """Check that the Karma web port is listening."""
@@ -107,52 +126,36 @@ class AlertmanagerKarmaCharm(CharmBase):
             # Changes were made, add the new layer
             container.add_layer("karma", layer, combine=True)
             logging.info("Added updated layer 'karma' to Pebble plan")
-        self._write_config_file()
-        self._restart_service(container, "karma")
+        config = self._get_config_file()
 
-    def _write_config_file(self):
-        """Write out a config file."""
-        servers = []
+        if config:
+            container.push(self.config_file, config)
+            self._restart_service(container, "karma")
 
-        for server in self.model.config["alertmanager-servers"].split(","):
-            # TODO deal with errors like multiple whitespace
-            try:
-                name, uri = server.split(" ")
-            except ValueError as e:
-                self.unit.status = BlockedStatus(
-                    message="Loading alertmanager-servers failed"
-                )
-                logging.error(f"Loading alertmanager-servers failed with: {e}")
+    def _get_config_file(self):
+        """Return a string to write to a Karma config file."""
 
-                return False
-            # check the uri looks like a uri
-            try:
-                parsed_uri = urlparse(uri)
-            except Exception as e:
-                self.unit.status = BlockedStatus(
-                    message="Loading alertmanager-servers failed"
-                )
-                logging.error(f"Loading alertmanager-servers failed with: {e}")
+        if len(self._stored.servers.keys()) == 0:
+            self.unit.status = BlockedStatus(message="Waiting for Karma relation.")
+            logging.info("No relations found for Karma, no Alertmanager URIs to view.")
 
-                return False
+            return False
 
-            if not all([parsed_uri.scheme, parsed_uri.netloc]):
-                self.unit.status = BlockedStatus(
-                    message=f"URI setting {uri} is invalid"
-                )
-                logging.error(f"URI setting {uri} is invalid")
-            servers.append({"name": name, "uri": uri, "proxy": True})
+        # self._stored.servers is a special type ops.framework.StoredDict which can't
+        # be turned to a string by yaml.dump, so here we convert it.
+        serverlist = []
+
+        for server in [self._stored.servers[s] for s in self._stored.servers.keys()]:
+            serverlist.append({s: server[s] for s in server.keys()})
 
         config = {
             "alertmanager": {
-                "servers": servers,
+                "servers": serverlist,
             },
             "listen": {"port": self.port},
         }
-        with open(self.config_file, "w") as f:
-            f.write(yaml.dump(config))
 
-        return True
+        return yaml.dump(config)
 
     def _restart_service(self, container, service):
         """Perform a service restart on the container."""
@@ -171,4 +174,4 @@ class AlertmanagerKarmaCharm(CharmBase):
 
 
 if __name__ == "__main__":
-    main(AlertmanagerKarmaCharm)
+    main(AlertmanagerKarmaCharm, use_juju_for_storage=True)
