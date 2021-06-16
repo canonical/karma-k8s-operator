@@ -15,15 +15,21 @@ to view.  These need to be either related to Karma using the 'karma' relation,
 or you can use the alertmanager-karma-proxy charm configured to point to a
 remote Alertmanager instance, and relate that to alertmanager-karma.
 
+You also need to have a working Kubernetes environment, and have bootstrapped a
+Juju controller of version 2.9+, with a model ready to use with the Kubernetes
+cloud.
+
 Example deployment:
 
 ```bash
-juju deploy ./alertmanager-karma.charm --resource karma-image=ghcr.io/prymitive/karma:v0.86
-juju deploy alertmanager-karma-proxy
+juju deploy alertmanager-karma --resource karma-image=ghcr.io/prymitive/karma:v0.86
+juju deploy alertmanager-karma-proxy --resource placeholder-image=alpine
 juju deploy nginx-ingress-integrator
-juju relate alertmanager-karma nginx-ingress-integrator
-juju relate alertmanager-karma-proxy alertmanager-karma
+juju relate alertmanager-karma:ingress nginx-ingress-integrator:ingress
+juju relate alertmanager-karma-proxy:karmamanagement alertmanager-karma:karmamanagement
 ```
+
+To access Karma, use a web browser pointing to http://service-address:8080.
 
 ## Developing
 

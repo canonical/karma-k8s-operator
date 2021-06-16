@@ -4,13 +4,7 @@
 #
 # Learn more at: https://juju.is/docs/sdk
 
-"""Charm the service.
-
-Refer to the following post for a quick-start guide that will help you
-develop a new k8s charm using the Operator Framework:
-
-    https://discourse.charmhub.io/t/4208
-"""
+"""Deploy Karma to a Kubernetes environment."""
 
 import logging
 
@@ -42,7 +36,9 @@ class AlertmanagerKarmaCharm(CharmBase):
         self.framework.observe(self.on.karma_pebble_ready, self._on_karma_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.karma = KarmaRequires(self)
-        self.framework.observe(self.on.karma_available, self._on_config_changed)
+        self.framework.observe(
+            self.on.karmamanagement_available, self._on_config_changed
+        )
 
         self._stored.set_default(servers={})
         self.port = 8080
@@ -64,7 +60,7 @@ class AlertmanagerKarmaCharm(CharmBase):
         # hostname will correspond to the deployed application name in the
         # model, but allow it to be set to something specific via config.
 
-        return self.config["external-hostname"] or f"{self.app.name}.juju"
+        return self.config["external_hostname"] or f"{self.app.name}.juju"
 
     def _karma_layer(self):
         """Returns the Pebble configuration layer for Karma."""

@@ -9,7 +9,7 @@ your charm's metadata.yaml file:
 
 ```yaml
 provides:
-  karma:
+  karmamanagement:
     interface: karma
 ```
 
@@ -21,15 +21,17 @@ from charms.alertmanager_karma.v0.karma import KarmaProvides
 # in your charm's `__init__` method:
 
 ```
-self.karma = KarmaProvides(self, {"name": self.app.name,
-                                  "uri": self.config["external_hostname"],
-                                 })
+self.karmamanagement = KarmaProvides(self, {"name": self.app.name,
+                                            "uri": self.config["external_hostname"],
+                                           })
 ```
 
 In config-changed, you can:
 
 ```
-self.karma.update_config({"service-hostname": self.config["external_hostname"]})
+self.karmamanagement.update_config(
+    {"service-hostname": self.config["external_hostname"]}
+    )
 ```
 """
 
@@ -47,7 +49,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 1
+LIBPATCH = 2
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +79,7 @@ class KarmaAvailableEvent(EventBase):
 class KarmaCharmEvents(CharmEvents):
     """Custom charm events."""
 
-    karma_available = EventSource(KarmaAvailableEvent)
+    karmamanagement_available = EventSource(KarmaAvailableEvent)
 
 
 class KarmaProvides(Object):
@@ -91,9 +93,11 @@ class KarmaProvides(Object):
         super().__init__(charm, "karma")
 
         self.framework.observe(
-            charm.on.karma_relation_changed, self._on_relation_changed
+            charm.on.karmamanagement_relation_changed, self._on_relation_changed
         )
-        self.framework.observe(charm.on.karma_relation_broken, self._on_relation_broken)
+        self.framework.observe(
+            charm.on.karmamanagement_relation_broken, self._on_relation_broken
+        )
         self.config_dict = config_dict
         self.charm = charm
 
@@ -131,7 +135,7 @@ class KarmaProvides(Object):
     def _on_relation_broken(self, event: RelationBrokenEvent):
         """Remove the unit data from local state."""
         self.charm._stored.related = False
-        self.charm.on.karma_available.emit()
+        self.charm.on.karmamanagement_available.emit()
 
     def _on_relation_changed(self, event):
         """Handle the relation-changed event."""
@@ -144,7 +148,7 @@ class KarmaProvides(Object):
             for key in self.config_dict:
                 event.relation.data[self.model.app][key] = str(self.config_dict[key])
         self.charm._stored.related = True
-        self.charm.on.karma_available.emit()
+        self.charm.on.karmamanagement_available.emit()
 
     def update_config(self, config_dict):
         """Allow for updates to relation."""
@@ -169,13 +173,15 @@ class KarmaRequires(Object):
     """
 
     def __init__(self, charm):
-        super().__init__(charm, "karma")
+        super().__init__(charm, "karmamanagement")
         # Observe the relation-changed hook event and bind
         # self.on_relation_changed() to handle the event.
         self.framework.observe(
-            charm.on["karma"].relation_changed, self._on_relation_changed
+            charm.on["karmamanagement"].relation_changed, self._on_relation_changed
         )
-        self.framework.observe(charm.on.karma_relation_broken, self._on_relation_broken)
+        self.framework.observe(
+            charm.on.karmamanagement_relation_broken, self._on_relation_broken
+        )
         self.charm = charm
 
     def _on_relation_changed(self, event):
@@ -211,7 +217,7 @@ class KarmaRequires(Object):
         self.charm._stored.servers[event.relation.id] = karma_data
         # Create an event that our charm can use to decide it's okay to
         # configure the karma.
-        self.charm.on.karma_available.emit()
+        self.charm.on.karmamanagement_available.emit()
 
     def _on_relation_broken(self, event: RelationBrokenEvent):
         """Remove the unit data from local state."""

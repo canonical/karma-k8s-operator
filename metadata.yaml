@@ -28,5 +28,5 @@ resources:
 requires:
   ingress:
     interface: ingress
-  karma:
+  karmamanagement:
     interface: karma
