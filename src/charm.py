@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2021 Xav Paice
+# Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 #
 # Learn more at: https://juju.is/docs/sdk
@@ -36,9 +36,7 @@ class AlertmanagerKarmaCharm(CharmBase):
         self.framework.observe(self.on.karma_pebble_ready, self._on_karma_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.karma = KarmaRequires(self)
-        self.framework.observe(
-            self.on.karmamanagement_available, self._on_config_changed
-        )
+        self.framework.observe(self.on.karmamanagement_available, self._on_config_changed)
 
         self._stored.set_default(servers={})
         self.port = 8080
@@ -73,9 +71,7 @@ class AlertmanagerKarmaCharm(CharmBase):
                     "summary": "karma",
                     "startup": "enabled",
                     "command": "/karma",
-                    "environment": {
-                        "CONFIG_FILE": self.config_file,
-                    },
+                    "environment": {"CONFIG_FILE": self.config_file},
                 },
             },
         }
@@ -145,9 +141,7 @@ class AlertmanagerKarmaCharm(CharmBase):
             serverlist.append({s: server[s] for s in server.keys()})
 
         config = {
-            "alertmanager": {
-                "servers": serverlist,
-            },
+            "alertmanager": {"servers": serverlist},
             "listen": {"port": self.port},
         }
 

@@ -1,3 +1,6 @@
+# Copyright 2021 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 """
 # Karma Library
 
@@ -42,7 +45,7 @@ from ops.framework import EventBase, EventSource, Object
 from ops.model import BlockedStatus
 
 # The unique Charmhub library identifier, never change it
-LIBID = "fc371faf79e24fd2a14bad8af250ad44"
+LIBID = "abcdef1234"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0

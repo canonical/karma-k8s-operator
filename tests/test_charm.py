@@ -55,9 +55,7 @@ class TestCharm(unittest.TestCase):
                     "summary": "karma",
                     "startup": "enabled",
                     "command": "/karma",
-                    "environment": {
-                        "CONFIG_FILE": self.harness.charm.config_file,
-                    },
+                    "environment": {"CONFIG_FILE": self.harness.charm.config_file},
                 }
             },
         }
