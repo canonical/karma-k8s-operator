@@ -10,7 +10,7 @@ import logging
 
 import requests
 import yaml
-from charms.alertmanager_karma.v0.karma import KarmaCharmEvents, KarmaRequires
+from charms.alertmanager_karma.v0.karma import KarmaProvider
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -26,20 +26,26 @@ logger = logging.getLogger(__name__)
 
 
 class AlertmanagerKarmaCharm(CharmBase):
-    """Charm the service."""
+    _container_name = "karma"  # automatically determined from charm name
+    _layer_name = "karma"  # layer label argument for container.add_layer
+    _service_name: str = "karma"  # chosen arbitrarily to match charm name
+    port = 8080  # web interface
 
     _stored = StoredState()
-    on = KarmaCharmEvents()
 
     def __init__(self, *args):
         super().__init__(*args)
+        self.container = self.unit.get_container(self._container_name)
+
         self.framework.observe(self.on.karma_pebble_ready, self._on_karma_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
-        self.karma = KarmaRequires(self)
-        self.framework.observe(self.on.karmamanagement_available, self._on_config_changed)
 
         self._stored.set_default(servers={})
-        self.port = 8080
+
+        # TODO fetch version from karma container
+        self.provider = KarmaProvider(self, "karma", "0.0.1")
+        self.framework.observe(self.provider.karmamanagement_available, self._on_config_changed)
+
         self.service_hostname = self._external_hostname
         self.config_file = "/srv/karma.yaml"
         self.ingress = IngressRequires(
@@ -84,7 +90,7 @@ class AlertmanagerKarmaCharm(CharmBase):
         container = event.workload
         # Define an initial Pebble layer configuration
         # Add intial Pebble config layer using the Pebble API
-        container.add_layer("karma", self._karma_layer(), combine=True)
+        container.add_layer(self._layer_name, self._karma_layer(), combine=True)
         config = self._get_config_file()
 
         if config:
@@ -116,7 +122,7 @@ class AlertmanagerKarmaCharm(CharmBase):
 
         if plan.services != layer["services"]:
             # Changes were made, add the new layer
-            container.add_layer("karma", layer, combine=True)
+            container.add_layer(self._layer_name, layer, combine=True)
             logging.info("Added updated layer 'karma' to Pebble plan")
         config = self._get_config_file()
 
