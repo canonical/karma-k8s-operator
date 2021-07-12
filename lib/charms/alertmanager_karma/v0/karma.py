@@ -42,6 +42,7 @@ import logging
 
 import ops.charm
 from ops.framework import EventBase, EventSource, ObjectEvents
+from ops.charm import RelationJoinedEvent, RelationDepartedEvent
 from ops.relation import ConsumerBase, ProviderBase
 from ops.framework import StoredState
 
@@ -74,11 +75,6 @@ class GenericEvent(EventBase):
         self.data = snapshot["data"]
 
 
-# Define a custom event "KarmaRelationUpdatedEvent" to be emitted
-# when relation change has completed successfully, and handled
-# by charm authors.
-# See "Notes on defining events" section in docs
-# TODO move inside KarmaConsumer class?
 class KarmaAvailableEvent(GenericEvent):
     pass
 
@@ -97,6 +93,7 @@ class KarmaProviderEvents(ObjectEvents):
 
 class KarmaProvider(ProviderBase):
     on = KarmaProviderEvents()
+    _stored = StoredState()
 
     def __init__(self, charm, relation_name: str, version: str = None):
         super().__init__(charm, relation_name, relation_name, version)
@@ -104,17 +101,24 @@ class KarmaProvider(ProviderBase):
         self._relation_name = relation_name
 
         events = self.charm.on[self._relation_name]
+        self.framework.observe(events.relation_joined, self._on_relation_joined)
         self.framework.observe(events.relation_changed, self._on_relation_changed)
         self.framework.observe(events.relation_departed, self._on_relation_departed)
-        self.framework.observe(events.relation_broken, self._on_relation_broken)
+        self._stored.set_default(active_relations=set())
 
     def get_proxied_alertmanagers(self) -> List[Dict[str, str]]:
         alertmanager_ips = []
+
         for relation in self.charm.model.relations[self._relation_name]:
+            if relation.id not in self._stored.active_relations:
+                # relation id is not present in the set of active relations
+                # this probably means that RelationBroken did not exit yet (was recently removed)
+                continue
+
             # get related application data
             data = None
             for key in relation.data:
-                if key is not self.charm.app and isinstance(key, ops.model.Application):
+                if key is not self.charm.app and isinstance(key, ops.charm.model.Application):
                     data = relation.data[key]
             if data:
                 if (name := data.get("name")) and (uri := data.get("uri")):
@@ -124,16 +128,14 @@ class KarmaProvider(ProviderBase):
 
         return alertmanager_ips  # TODO sorted
 
+    def _on_relation_joined(self, event: RelationJoinedEvent):
+        self._stored.active_relations.add(event.relation.id)
+
     def _on_relation_changed(self, _):
-        logger.info("===== RELATION CHANGED =====")
         self.on.alertmanager_proxy_changed.emit()
 
-    def _on_relation_departed(self, _):
-        logger.info("===== RELATION DEPARTED =====")
-        self.on.alertmanager_proxy_changed.emit()
-
-    def _on_relation_broken(self, _):
-        logger.info("===== RELATION BROKEN =====")
+    def _on_relation_departed(self, event: RelationDepartedEvent):
+        self._stored.active_relations -= {event.relation.id}
         self.on.alertmanager_proxy_changed.emit()
 
     @property
