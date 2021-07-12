@@ -6,30 +6,41 @@
 
 """Deploy Karma to a Kubernetes environment."""
 
-import logging
-
-import requests
-import yaml
 from charms.alertmanager_karma.v0.karma import KarmaProvider
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
+
+import ops
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, UnknownStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.pebble import ChangeError
+
+from typing import Optional, Dict, Any
+import logging
+import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-
-# from urllib.parse import urlparse
-
+import yaml
+import hashlib
 
 logger = logging.getLogger(__name__)
+
+
+def sha256(hashable) -> str:
+    """Use instead of the builtin hash() for repeatable values"""
+    if isinstance(hashable, str):
+        hashable = hashable.encode("utf-8")
+    return hashlib.sha256(hashable).hexdigest()
 
 
 class AlertmanagerKarmaCharm(CharmBase):
     _container_name = "karma"  # automatically determined from charm name
     _layer_name = "karma"  # layer label argument for container.add_layer
-    _service_name: str = "karma"  # chosen arbitrarily to match charm name
+    _service_name = "karma"  # chosen arbitrarily to match charm name
+    _peer_relation_name = "replicas"  # must match metadata.yaml peer role name
     port = 8080  # web interface
+    config_file = "/srv/karma.yaml"
 
     _stored = StoredState()
 
@@ -37,17 +48,20 @@ class AlertmanagerKarmaCharm(CharmBase):
         super().__init__(*args)
         self.container = self.unit.get_container(self._container_name)
 
-        self.framework.observe(self.on.karma_pebble_ready, self._on_karma_pebble_ready)
+        self.framework.observe(self.on.karma_pebble_ready, self._on_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
 
-        self._stored.set_default(servers={})
+        self._stored.set_default(servers={}, pebble_ready=False, config_hash=None)
 
         # TODO fetch version from karma container
-        self.provider = KarmaProvider(self, "karma", "0.0.1")
-        self.framework.observe(self.provider.karmamanagement_available, self._on_config_changed)
+        self.provider = KarmaProvider(
+            self, "karmamanagement", "0.0.1"
+        )  # TODO rename both attribute and class
+        self.framework.observe(
+            self.provider.on.alertmanager_proxy_changed, self._on_alertmanager_proxy_changed
+        )
 
         self.service_hostname = self._external_hostname
-        self.config_file = "/srv/karma.yaml"
         self.ingress = IngressRequires(
             self,
             {
@@ -58,6 +72,107 @@ class AlertmanagerKarmaCharm(CharmBase):
         )
 
     @property
+    def peer_relation(self) -> Optional[ops.model.Relation]:
+        # Returns None if called too early, e.g. during install.
+        return self.model.get_relation(self._peer_relation_name)
+
+    @property
+    def private_address(self) -> Optional[str]:
+        """Get the unit's ip address.
+
+        Returns:
+          None if no IP is available (called before unit "joined"); unit's ip address otherwise
+        """
+        if bind_address := self.model.get_binding(self.peer_relation).network.bind_address:
+            bind_address = str(bind_address)
+        return bind_address
+
+    def _common_exit_hook(self) -> bool:
+        if not self._stored.pebble_ready:
+            self.unit.status = MaintenanceStatus("Waiting for pod startup to complete")
+            return False
+
+        # Wait for IP address. IP address is needed for config hot-reload and status updates.
+        if not self.private_address:
+            self.unit.status = MaintenanceStatus("Waiting for IP address")
+            return False
+
+        if not self.provider.config_valid:
+            self.unit.status = BlockedStatus("Waiting for valid config from proxy charm")
+            return False
+
+        # Update pebble layer
+        try:
+            config_changed = self._update_config()
+            layer_changed = self._update_layer(restart=False)
+            if layer_changed or config_changed or not self.is_service_running:
+                if not self._restart_service():
+                    self.unit.status = BlockedStatus("Service restart failed")
+                    return False
+
+        except ChangeError as e:
+            logger.error("Pebble error: %s", str(e))
+            self.unit.status = BlockedStatus("Pebble error")
+            return False
+
+        self.provider.ready()
+        self.unit.status = ActiveStatus()
+
+        return True
+
+    def _update_config(self) -> bool:
+        """Update the karma yml config file to reflect changes in configuration.
+        Args:
+          None
+        Returns:
+          True if config changed; False otherwise
+        """
+        alertmanagers = self.provider.get_proxied_alertmanagers()
+        logger.info("alertmanagers=%s", alertmanagers)
+        config = {
+            "alertmanager": {"servers": alertmanagers},
+            "listen": {"port": self.port},
+        }
+        config_yaml = yaml.safe_dump(config)
+        config_hash = sha256(config_yaml)
+
+        config_changed = False
+        if config_hash != self._stored.config_hash:
+            self.container.push(self.config_file, config_yaml)
+            self._stored.config_hash = config_hash
+            config_changed = True
+
+        return config_changed
+
+    def _update_layer(self, restart: bool = True) -> bool:
+        """Update service layer to reflect changes in peers (replicas).
+        Args:
+          restart: a flag indicating if the service should be restarted if a change was detected.
+        Returns:
+          True if anything changed; False otherwise
+        """
+        overlay = self._karma_layer()
+
+        plan = self.container.get_plan()
+
+        is_changed = False
+        # if this unit has just started, the services does not yet exist - using "get"
+        service = plan.services.get(self._service_name)
+        overlay_command = overlay["services"][self._service_name]["command"]
+        overlay_environment = overlay["services"][self._service_name]["environment"]
+
+        if service is None or any(
+            [service.command != overlay_command, service.environment != overlay_environment]
+        ):
+            is_changed = True
+            self.container.add_layer(self._layer_name, overlay, combine=True)
+
+        if is_changed and restart:
+            self._restart_service()
+
+        return is_changed
+
+    @property
     def _external_hostname(self):
         """Return the external hostname to be passed to ingress via the relation."""
         # It is recommended to default to `self.app.name` so that the external
@@ -66,15 +181,15 @@ class AlertmanagerKarmaCharm(CharmBase):
 
         return self.config["external_hostname"] or f"{self.app.name}.juju"
 
-    def _karma_layer(self):
+    def _karma_layer(self) -> Dict[str, Any]:
         """Returns the Pebble configuration layer for Karma."""
-        pebble_layer = {
+        return {
             "summary": "karma layer",
             "description": "pebble config layer for karma",
             "services": {
-                "karma": {
+                self._service_name: {
                     "override": "replace",
-                    "summary": "karma",
+                    "summary": "karma service",
                     "startup": "enabled",
                     "command": "/karma",
                     "environment": {"CONFIG_FILE": self.config_file},
@@ -82,20 +197,9 @@ class AlertmanagerKarmaCharm(CharmBase):
             },
         }
 
-        return pebble_layer
-
-    def _on_karma_pebble_ready(self, event):
-        """Define and start a workload using the Pebble API."""
-        # Get a reference the container attribute on the PebbleReadyEvent
-        container = event.workload
-        # Define an initial Pebble layer configuration
-        # Add intial Pebble config layer using the Pebble API
-        container.add_layer(self._layer_name, self._karma_layer(), combine=True)
-        config = self._get_config_file()
-
-        if config:
-            container.push(self.config_file, config)
-            self._restart_service(container, "karma")
+    def _on_pebble_ready(self, event):
+        self._stored.pebble_ready = True
+        self._common_exit_hook()
 
     def _check_karma_service_alive(self) -> bool:
         """Check that the Karma web port is listening."""
@@ -112,61 +216,45 @@ class AlertmanagerKarmaCharm(CharmBase):
             return False
 
     def _on_config_changed(self, _):
-        """Handle the config-changed event"""
-        container = self.unit.get_container("karma")
-        # Create a new config layer
-        layer = self._karma_layer()
-        # Get the current config
-        plan = container.get_plan()
-        # Check if there are any changes to services
+        self._common_exit_hook()
 
-        if plan.services != layer["services"]:
-            # Changes were made, add the new layer
-            container.add_layer(self._layer_name, layer, combine=True)
-            logging.info("Added updated layer 'karma' to Pebble plan")
-        config = self._get_config_file()
+    def _on_alertmanager_proxy_changed(self, _):
+        self._common_exit_hook()
 
-        if config:
-            container.push(self.config_file, config)
-            self._restart_service(container, "karma")
+    @property
+    def is_service_running(self) -> bool:
+        """Helper function for checking if the alertmanager service is running.
+        Returns:
+          True if the service is running; False otherwise.
+        Raises:
+          ModelError: If the service is not defined (e.g. layer does not exist).
+        """
+        return self.container.get_service(self._service_name).is_running()
 
-    def _get_config_file(self):
-        """Return a string to write to a Karma config file."""
+    def _restart_service(self) -> bool:
+        logger.info("Restarting service %s", self._service_name)
 
-        if len(self._stored.servers.keys()) == 0:
-            self.unit.status = BlockedStatus(message="Waiting for Karma relation.")
-            logging.info("No relations found for Karma, no Alertmanager URIs to view.")
+        try:
+            # if the service does not exist, ModelError will be raised
+            if self.is_service_running:
+                self.container.stop(self._service_name)
+            self.container.start(self._service_name)
 
+            if self._check_karma_service_alive():
+                return True
+            else:
+                logger.warning("Service restarted but karma server does not respond")
+                return False
+
+        except ops.model.ModelError:
+            logger.warning("Service does not (yet?) exist; (re)start aborted")
             return False
-
-        # self._stored.servers is a special type ops.framework.StoredDict which can't
-        # be turned to a string by yaml.dump, so here we convert it.
-        serverlist = []
-
-        for server in [self._stored.servers[s] for s in self._stored.servers.keys()]:
-            serverlist.append({s: server[s] for s in server.keys()})
-
-        config = {
-            "alertmanager": {"servers": serverlist},
-            "listen": {"port": self.port},
-        }
-
-        return yaml.dump(config)
-
-    def _restart_service(self, container, service):
-        """Perform a service restart on the container."""
-
-        if container.get_service(service).is_running():
-            container.stop(service)
-        # Restart it and report a new status to Juju
-        container.start(service)
-        logging.info(f"Restarted service: {service}")
-        # workaround for https://github.com/canonical/pebble/issues/46
-
-        if self._check_karma_service_alive():
-            self.unit.status = ActiveStatus()
-        else:
-            self.unit.status = UnknownStatus()
+        except ChangeError as e:
+            logger.error("ChangeError: failed to (re)start service: %s", str(e))
+            return False
+        except Exception as e:
+            logger.error("failed to (re)start service: %s", str(e))
+            raise
 
 
 if __name__ == "__main__":

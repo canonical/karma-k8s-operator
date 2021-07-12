@@ -60,13 +60,8 @@ Currently, supported relations are:
 This charm can be used with the following image:
 - `ghcr.io/prymitive/karma:v0.86`
 
-## Developing
 
-Create and activate a virtualenv with the development requirements:
 
-```bash
-virtualenv -p python3 venv
-source venv/bin/activate
-pip install -r requirements-dev.txt
-```
+
+
 

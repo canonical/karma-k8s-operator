@@ -1,6 +1,7 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 name: alertmanager-karma
+display-name: Karma
 description: |
   Alertmanager UI is useful for browsing alerts and managing silences, but it's
   lacking as a dashboard tool - karma aims to fill this gap.  This charm deploys
@@ -33,3 +34,6 @@ provides:
   karmamanagement:
     interface: karma
 
+peers:
+  replicas:
+    interface: karma_replica
