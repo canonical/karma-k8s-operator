@@ -54,9 +54,7 @@ class AlertmanagerKarmaCharm(CharmBase):
         self._stored.set_default(servers={}, pebble_ready=False, config_hash=None)
 
         # TODO fetch version from karma container
-        self.provider = KarmaProvider(
-            self, "karmamanagement", "0.0.1"
-        )  # TODO rename both attribute and class
+        self.provider = KarmaProvider(self, "karmamanagement", self._service_name, "0.0.1")
         self.framework.observe(
             self.provider.on.alertmanager_proxy_changed, self._on_alertmanager_proxy_changed
         )
