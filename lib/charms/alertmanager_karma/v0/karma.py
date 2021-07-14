@@ -3,7 +3,7 @@
 
 """ # Karma library
 
-This library is designed to be used by a charm consuming or providing the karmamanagement relation.
+This library is designed to be used by a charm consuming or providing the karma-dashboard relation.
 """
 
 import logging
@@ -14,7 +14,7 @@ from ops.charm import RelationJoinedEvent, RelationDepartedEvent
 from ops.relation import ConsumerBase, ProviderBase
 from ops.framework import StoredState
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Iterable
 
 # The unique Charmhub library identifier, never change it
 LIBID = "abcdef1234"
@@ -27,6 +27,18 @@ LIBAPI = 0
 LIBPATCH = 2
 
 logger = logging.getLogger(__name__)
+
+
+class KarmaAlertmanagerConfig:
+    required_fields = ("name", "uri")
+
+    @staticmethod
+    def is_valid(config: Dict[str, str]):
+        return all(key in config for key in KarmaAlertmanagerConfig.required_fields)
+
+
+def dict_subset(data: dict, key_subset: Iterable):
+    return {k: v for k, v in data.items() if k in key_subset}
 
 
 class GenericEvent(EventBase):
@@ -43,12 +55,12 @@ class GenericEvent(EventBase):
         self.data = snapshot["data"]
 
 
-class KarmaAlertmanagerProxyChanged(GenericEvent):
+class KarmaAlertmanagerConfigChanged(GenericEvent):
     pass
 
 
 class KarmaProviderEvents(ObjectEvents):
-    alertmanager_proxy_changed = EventSource(KarmaAlertmanagerProxyChanged)
+    alertmanager_config_changed = EventSource(KarmaAlertmanagerConfigChanged)
 
 
 class KarmaProvider(ProviderBase):
@@ -60,8 +72,8 @@ class KarmaProvider(ProviderBase):
 
     ```yaml
     provides:
-      karmamanagement:
-        interface: karma
+      karma-dashboard:
+        interface: karma_dashboard
     ```
 
     A typical example of importing this library might be
@@ -74,16 +86,16 @@ class KarmaProvider(ProviderBase):
 
     ```python
     self.provider = KarmaProvider(
-        self, "karmamanagement", "karma", "0.0.1"
+        self, "karma-dashboard", "karma", "0.0.1"
     )
     ```
 
-    The provider charm is expected to observe and respond to the :class:`KarmaAlertmanagerProxyChanged` event,
+    The provider charm is expected to observe and respond to the :class:`KarmaAlertmanagerConfigChanged` event,
     for example:
 
     ```python
     self.framework.observe(
-        self.provider.on.alertmanager_proxy_changed, self._on_alertmanager_proxy_changed
+        self.provider.on.alertmanager_config_changed, self._on_alertmanager_config_changed
     )
     ```
 
@@ -92,7 +104,7 @@ class KarmaProvider(ProviderBase):
     From charm code you can then obtain the list of proxied alertmanagers via:
 
     ```python
-    alertmanagers = self.provider.get_proxied_alertmanagers()
+    alertmanagers = self.provider.get_alertmanager_servers()
     ```
 
     Arguments:
@@ -120,25 +132,29 @@ class KarmaProvider(ProviderBase):
         self.framework.observe(events.relation_departed, self._on_relation_departed)
         self._stored.set_default(active_relations=set())
 
-    def get_proxied_alertmanagers(self) -> List[Dict[str, str]]:
+    def get_alertmanager_servers(self) -> List[Dict[str, str]]:
         alertmanager_ips = []
+        logger.info("get_alertmanager_servers")
 
         for relation in self.charm.model.relations[self._relation_name]:
+            logger.info("relation.data = %s", relation.data)
             if relation.id not in self._stored.active_relations:
                 # relation id is not present in the set of active relations
                 # this probably means that RelationBroken did not exit yet (was recently removed)
                 continue
 
-            # get related application data
+            # get data from related application
             data = None
             for key in relation.data:
-                if key is not self.charm.app and isinstance(key, ops.charm.model.Application):
+                if key is not self.charm.unit and isinstance(key, ops.charm.model.Unit):
                     data = relation.data[key]
+                    break
             if data:
-                if (name := data.get("name")) and (uri := data.get("uri")):
-                    alertmanager_ips.append({"name": name, "uri": uri})
+                config = dict_subset(data, KarmaAlertmanagerConfig.required_fields)
+                if KarmaAlertmanagerConfig.is_valid(config) and config not in alertmanager_ips:
+                    alertmanager_ips.append(config)
             else:
-                logger.error("proxied alertmanagers: no related apps in relation dict")
+                logger.warning("no related units in relation dict")
 
         return alertmanager_ips  # TODO sorted
 
@@ -146,28 +162,20 @@ class KarmaProvider(ProviderBase):
         self._stored.active_relations.add(event.relation.id)
 
     def _on_relation_changed(self, _):
-        self.on.alertmanager_proxy_changed.emit()
+        self.on.alertmanager_config_changed.emit()
 
     def _on_relation_departed(self, event: RelationDepartedEvent):
         self._stored.active_relations -= {event.relation.id}
-        self.on.alertmanager_proxy_changed.emit()
+        self.on.alertmanager_config_changed.emit()
 
     @property
     def config_valid(self) -> bool:
         # karma will fail starting without alertmanager server(s), which would cause pebble to error out.
 
         # check that there is at least one alertmanager server configured
-        servers = self.get_proxied_alertmanagers()
-        if len(servers) == 0:
-            return False
-
-        # check that at least one of the entries has the expected keys
-        valid = False
-        for server in servers:
-            if server.get("name") and server.get("uri"):
-                valid = True
-                break
-        return valid
+        servers = self.get_alertmanager_servers()
+        logger.info("config_valid: servers = %s", servers)
+        return len(servers) > 0
 
 
 class KarmaConsumer(ConsumerBase):
@@ -179,8 +187,8 @@ class KarmaConsumer(ConsumerBase):
 
     ```yaml
     requires:
-      karmamanagement:
-        interface: karma
+      karma-dashboard:
+        interface: karma_dashboard
     ```
 
     A typical example of importing this library might be
@@ -194,7 +202,7 @@ class KarmaConsumer(ConsumerBase):
     ```python
     self.karma_lib = KarmaConsumer(
         self,
-        "karmamanagement",
+        "karma-dashboard",
         consumes={"karma": ">=0.0.1"},
     )
     ```
@@ -235,22 +243,19 @@ class KarmaConsumer(ConsumerBase):
             return
 
         # update app data bag
-        event.relation.data[self.charm.app].update(self._stored.config)
-
-    @staticmethod
-    def _is_config_valid(config: Dict[str, str]):
-        return all(key in config for key in ("name", "uri"))
+        event.relation.data[self.charm.unit].update(self._stored.config)
 
     @property
     def config_valid(self):
-        return self._is_config_valid(self._stored.config)
+        return KarmaAlertmanagerConfig.is_valid(self._stored.config)
 
     @property
     def ip_address(self) -> Optional[str]:
         return self._stored.config.get("uri", None)
 
-    def set_config(self, config) -> bool:
-        if not self._is_config_valid(config):
+    def set_config(self, name: str, uri: str) -> bool:
+        config = {"name": name, "uri": uri}
+        if not KarmaAlertmanagerConfig.is_valid(config):
             return False
 
         self._stored.config.update(config)
@@ -259,7 +264,8 @@ class KarmaConsumer(ConsumerBase):
         if not self.model.unit.is_leader():
             return True
 
+        logger.info("relations @ set_config: %s", [i for i in self.charm.model.relations[self._consumer_relation_name]])
         for relation in self.charm.model.relations[self._consumer_relation_name]:
-            relation.data[self.charm.app].update(self._stored.config)
+            relation.data[self.charm.unit].update(self._stored.config)
 
         return True

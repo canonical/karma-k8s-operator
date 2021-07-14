@@ -54,9 +54,9 @@ class AlertmanagerKarmaCharm(CharmBase):
         self._stored.set_default(servers={}, pebble_ready=False, config_hash=None)
 
         # TODO fetch version from karma container
-        self.provider = KarmaProvider(self, "karmamanagement", self._service_name, "0.0.1")
+        self.provider = KarmaProvider(self, "dashboard", self._service_name, "0.0.1")
         self.framework.observe(
-            self.provider.on.alertmanager_proxy_changed, self._on_alertmanager_proxy_changed
+            self.provider.on.alertmanager_config_changed, self._on_alertmanager_config_changed
         )
 
         self.service_hostname = self._external_hostname
@@ -125,7 +125,7 @@ class AlertmanagerKarmaCharm(CharmBase):
         Returns:
           True if config changed; False otherwise
         """
-        alertmanagers = self.provider.get_proxied_alertmanagers()
+        alertmanagers = self.provider.get_alertmanager_servers()
         logger.info("alertmanagers=%s", alertmanagers)
         config = {
             "alertmanager": {"servers": alertmanagers},
@@ -216,7 +216,7 @@ class AlertmanagerKarmaCharm(CharmBase):
     def _on_config_changed(self, _):
         self._common_exit_hook()
 
-    def _on_alertmanager_proxy_changed(self, _):
+    def _on_alertmanager_config_changed(self, _):
         self._common_exit_hook()
 
     @property
