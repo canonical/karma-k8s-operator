@@ -256,19 +256,14 @@ class KarmaConsumer(ConsumerBase):
     def set_config(self, name: str, uri: str) -> bool:
         config = {"name": name, "uri": uri}
         if not KarmaAlertmanagerConfig.is_valid(config):
+            logger.warning("Invalid config: {%s, %s}", name, uri)
             return False
 
         self._stored.config.update(config)
         logger.info("stored config: %s", self._stored.config)
 
-        if not self.model.unit.is_leader():
-            return True
-
-        logger.info(
-            "relations @ set_config: %s",
-            [i for i in self.charm.model.relations[self._consumer_relation_name]],
-        )
-        for relation in self.charm.model.relations[self._consumer_relation_name]:
-            relation.data[self.charm.unit].update(self._stored.config)
+        if self.model.unit.is_leader() and self._consumer_relation_name in self.charm.model.relations:
+            for relation in self.charm.model.relations[self._consumer_relation_name]:
+                relation.data[self.charm.unit].update(self._stored.config)
 
         return True
