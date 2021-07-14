@@ -1,4 +1,4 @@
-# alertmanager-karma
+# Karma Operator (k8s)
 
 ## Description
 
