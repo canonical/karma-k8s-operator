@@ -1,6 +1,6 @@
-# Contributing to alertmanager-karma
+# Contributing to karma-operator
 The intended use case of this operator is to be deployed together with 
-alertmanager-karma-proxy.
+alertmanager-operator or karma-alertmanager-proxy-operator.
 
 ## Bugs and pull requests
 - Generally, before developing enhancements to this charm, you should consider

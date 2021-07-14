@@ -22,15 +22,29 @@ cloud.
 Example deployment:
 
 ```shell
-juju deploy alertmanager-karma --resource karma-image=ghcr.io/prymitive/karma:v0.86
-juju deploy alertmanager-karma-proxy --resource placeholder-image=alpine
-juju relate alertmanager-karma-proxy alertmanager-karma
-
-# ingress for karma web interface
-juju deploy nginx-ingress-integrator
-juju relate alertmanager-karma nginx-ingress-integrator
+juju deploy karma-k8s
 ```
 
+Then you could relate to [alertmanager](https://github.com/canonical/alertmanager-operator):
+```shell
+juju deploy alertmanager-k8s
+juju relate alertmanager-k8s karma-k8s
+```
+
+or to a remote alertmanager via an [alertmanager proxy](https://github.com/canonical/karma-alertmanager-proxy-operator):
+
+```shell
+juju deploy karma-alertmanager-proxy-k8s
+juju relate karma-alertmanager-proxy-k8s karma-k8s
+```
+
+You could add an ingress for the karma web interface:
+
+```shell
+# ingress for karma web interface
+juju deploy nginx-ingress-integrator
+juju relate karma-k8s nginx-ingress-integrator
+```
 
 ### Configuration
 - `external_hostname` (optional) - the external hostname this application should be available on.
@@ -43,7 +57,7 @@ None.
 You may add additional Alertmanager units for high availability
 
 ```shell
-juju add-unit alertmanager-karma
+juju add-unit karma-k8s
 ```
 
 ### Dashboard
@@ -52,8 +66,8 @@ To access Karma, use a web browser pointing to `http://service-address:8080`.
 
 ## Relations
 Currently, supported relations are:
-- karmamanagement, via which alertmanager-karma receives information about 
-  alertmanager units, typically from alertmanager-karma-proxy.
+- karma-dashboard, via which karma-operator receives information about 
+  alertmanager units, e.g. from alertmanager-operator or karma-alertmanager-proxy-operator.
 - ingress, for interfacing with nginx-ingress-integrator.
 
 ## OCI Images
