@@ -264,7 +264,10 @@ class KarmaConsumer(ConsumerBase):
         if not self.model.unit.is_leader():
             return True
 
-        logger.info("relations @ set_config: %s", [i for i in self.charm.model.relations[self._consumer_relation_name]])
+        logger.info(
+            "relations @ set_config: %s",
+            [i for i in self.charm.model.relations[self._consumer_relation_name]],
+        )
         for relation in self.charm.model.relations[self._consumer_relation_name]:
             relation.data[self.charm.unit].update(self._stored.config)
 

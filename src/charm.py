@@ -6,7 +6,7 @@
 
 """Deploy Karma to a Kubernetes environment."""
 
-from charms.alertmanager_karma.v0.karma import KarmaProvider
+from charms.karma_k8s.v0.karma import KarmaProvider
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
 
 import ops
