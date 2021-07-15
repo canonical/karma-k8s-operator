@@ -53,8 +53,8 @@ class AlertmanagerKarmaCharm(CharmBase):
 
         self._stored.set_default(servers={}, pebble_ready=False, config_hash=None)
 
-        # TODO fetch version from karma container
-        self.provider = KarmaProvider(self, "dashboard", self._service_name, "0.0.1")
+        # TODO obtain version from karma (if ever gets added to its HTTP API)
+        self.provider = KarmaProvider(self, "dashboard", self._service_name, "0.86")
         self.framework.observe(
             self.provider.on.alertmanager_config_changed, self._on_alertmanager_config_changed
         )
