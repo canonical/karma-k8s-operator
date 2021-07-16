@@ -201,7 +201,7 @@ class AlertmanagerKarmaCharm(CharmBase):
 
     def _check_karma_service_alive(self) -> bool:
         """Check that the Karma web port is listening."""
-        retry_strategy = Retry(total=3, backoff_factor=1, allowed_methods=["GET"])
+        retry_strategy = Retry(total=3, backoff_factor=1)
         adapter = HTTPAdapter(max_retries=retry_strategy)
         http = requests.Session()
         http.mount("https://", adapter)
