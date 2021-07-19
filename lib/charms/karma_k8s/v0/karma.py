@@ -164,27 +164,19 @@ class KarmaProvider(ProviderBase):
     def _on_relation_joined(self, event: RelationJoinedEvent):
         self._stored.active_relations.add(event.relation.id)
         self.on.alertmanager_config_changed.emit()
-        logger.info("REL JOINED: active_relation: %s", self._stored.active_relations)
-        logger.info("REL JOINED: relation.data = %s", event.relation.data)
 
     def _on_relation_changed(self, event):
         self._stored.active_relations.add(event.relation.id)
         self.on.alertmanager_config_changed.emit()
-        logger.info("REL CHANGED: active_relation: %s", self._stored.active_relations)
-        logger.info("REL CHANGED: relation.data = %s", event.relation.data)
 
     def _on_relation_departed(self, event: RelationDepartedEvent):
         """Hook is called when a unit leaves, but another unit may still be present"""
         self.on.alertmanager_config_changed.emit()
-        logger.info("REL DEPART: active_relation: %s", self._stored.active_relations)
-        logger.info("REL DEPART: relation.data = %s", event.relation.data)
 
     def _on_relation_broken(self, event: RelationBrokenEvent):
         """Hook is called when an application or the relation itself are removed"""
         self._stored.active_relations -= {event.relation.id}
         self.on.alertmanager_config_changed.emit()
-        logger.info("REL BROKEN: active_relation: %s", self._stored.active_relations)
-        logger.info("REL BROKEN: relation.data = %s", event.relation.data)
 
     @property
     def config_valid(self) -> bool:
@@ -192,7 +184,7 @@ class KarmaProvider(ProviderBase):
 
         # check that there is at least one alertmanager server configured
         servers = self.get_alertmanager_servers()
-        logger.info("config_valid: servers = %s", servers)
+        logger.debug("config_valid: servers = %s", servers)
         return len(servers) > 0
 
 
