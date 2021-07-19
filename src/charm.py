@@ -50,6 +50,7 @@ class AlertmanagerKarmaCharm(CharmBase):
 
         self.framework.observe(self.on.karma_pebble_ready, self._on_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.start, self._on_start)
 
         self._stored.set_default(servers={}, pebble_ready=False, config_hash=None)
 
@@ -96,7 +97,7 @@ class AlertmanagerKarmaCharm(CharmBase):
             return False
 
         if not self.provider.config_valid:
-            self.unit.status = BlockedStatus("Waiting for valid config from proxy charm")
+            self.unit.status = BlockedStatus("Waiting for valid config")
             return False
 
         # Update pebble layer
@@ -197,6 +198,11 @@ class AlertmanagerKarmaCharm(CharmBase):
 
     def _on_pebble_ready(self, event):
         self._stored.pebble_ready = True
+        self._common_exit_hook()
+
+    def _on_start(self, _):
+        # With Juju 2.9.5 encountered a scenario in which pebble_ready and config_changed fired, but IP address was not
+        # available and the status was stuck on "Waiting for IP address". Adding this hook as a workaround.
         self._common_exit_hook()
 
     def _check_karma_service_alive(self) -> bool:

@@ -10,7 +10,7 @@ import logging
 
 import ops.charm
 from ops.framework import EventBase, EventSource, ObjectEvents
-from ops.charm import RelationJoinedEvent, RelationDepartedEvent
+from ops.charm import RelationJoinedEvent, RelationDepartedEvent, RelationBrokenEvent
 from ops.relation import ConsumerBase, ProviderBase
 from ops.framework import StoredState
 
@@ -30,20 +30,29 @@ logger = logging.getLogger(__name__)
 
 
 class KarmaAlertmanagerConfig:
-    required_fields = ("name", "uri")
+    required_fields = {"name", "uri"}
+    optional_fields = {"cluster"}
+    _supported_fields = required_fields | optional_fields
 
     @staticmethod
     def is_valid(config: Dict[str, str]):
-        return all(key in config for key in KarmaAlertmanagerConfig.required_fields)
+        all_required = all(key in config for key in KarmaAlertmanagerConfig.required_fields)
+        all_supported = all(key in KarmaAlertmanagerConfig._supported_fields for key in config)
+        return all_required and all_supported
 
     @staticmethod
     def from_dict(data: Dict[str, str]) -> Dict[str, str]:
         config = {k: data[k] for k in data if k in KarmaAlertmanagerConfig.required_fields}
+        optional_config = {
+            k: data[k] for k in data if data[k] and k in KarmaAlertmanagerConfig.optional_fields
+        }
+        config.update(optional_config)
         return config if KarmaAlertmanagerConfig.is_valid(config) else {}
 
     @staticmethod
-    def build(name: str, uri: str) -> Dict[str, str]:
-        return KarmaAlertmanagerConfig.from_dict({"name": name, "uri": uri})
+    def build(name: str, url: str, *, cluster=None) -> Dict[str, str]:
+        # https://github.com/prymitive/karma/blob/main/docs/CONFIGURATION.md#alertmanagers
+        return KarmaAlertmanagerConfig.from_dict({"name": name, "uri": url, "cluster": cluster})
 
 
 class KarmaAlertmanagerConfigChanged(EventBase):
@@ -66,10 +75,10 @@ class KarmaProviderEvents(ObjectEvents):
 
 class KarmaProvider(ProviderBase):
     """A "provider" handler to be used by the Karma charm (the 'provides' side of the 'karma' relation).
-    This library offers the interface needed in order to provide Alertmanager URIs and associated information to the
+    This library offers the interface needed in order to provide Alertmanager URLs and associated information to the
     Karma application.
 
-    To have your charm provide URIs to Karma, declare the interface's use in your charm's metadata.yaml file:
+    To have your charm provide URLs to Karma, declare the interface's use in your charm's metadata.yaml file:
 
     ```yaml
     provides:
@@ -133,8 +142,9 @@ class KarmaProvider(ProviderBase):
         self._stored.set_default(active_relations=set())
 
     def get_alertmanager_servers(self) -> List[Dict[str, str]]:
-        alertmanager_ips = []
+        servers = []
 
+        logger.debug("relations for %s: %s", self.name, self.charm.model.relations[self.name])
         for relation in self.charm.model.relations[self.name]:
             if relation.id not in self._stored.active_relations:
                 # relation id is not present in the set of active relations
@@ -142,29 +152,39 @@ class KarmaProvider(ProviderBase):
                 continue
 
             # get data from related application
-            data = None
             for key in relation.data:
                 if key is not self.charm.unit and isinstance(key, ops.charm.model.Unit):
                     data = relation.data[key]
-                    break
-            if data:
-                config = KarmaAlertmanagerConfig.from_dict(data)
-                if config and config not in alertmanager_ips:
-                    alertmanager_ips.append(config)
-            else:
-                logger.warning("no related units in relation dict")
+                    config = KarmaAlertmanagerConfig.from_dict(data)
+                    if config and config not in servers:
+                        servers.append(config)
 
-        return alertmanager_ips  # TODO sorted
+        return servers  # TODO sorted
 
     def _on_relation_joined(self, event: RelationJoinedEvent):
         self._stored.active_relations.add(event.relation.id)
-
-    def _on_relation_changed(self, _):
         self.on.alertmanager_config_changed.emit()
+        logger.info("REL JOINED: active_relation: %s", self._stored.active_relations)
+        logger.info("REL JOINED: relation.data = %s", event.relation.data)
+
+    def _on_relation_changed(self, event):
+        self._stored.active_relations.add(event.relation.id)
+        self.on.alertmanager_config_changed.emit()
+        logger.info("REL CHANGED: active_relation: %s", self._stored.active_relations)
+        logger.info("REL CHANGED: relation.data = %s", event.relation.data)
 
     def _on_relation_departed(self, event: RelationDepartedEvent):
+        """Hook is called when a unit leaves, but another unit may still be present"""
+        self.on.alertmanager_config_changed.emit()
+        logger.info("REL DEPART: active_relation: %s", self._stored.active_relations)
+        logger.info("REL DEPART: relation.data = %s", event.relation.data)
+
+    def _on_relation_broken(self, event: RelationBrokenEvent):
+        """Hook is called when an application or the relation itself are removed"""
         self._stored.active_relations -= {event.relation.id}
         self.on.alertmanager_config_changed.emit()
+        logger.info("REL BROKEN: active_relation: %s", self._stored.active_relations)
+        logger.info("REL BROKEN: relation.data = %s", event.relation.data)
 
     @property
     def config_valid(self) -> bool:
@@ -178,10 +198,10 @@ class KarmaProvider(ProviderBase):
 
 class KarmaConsumer(ConsumerBase):
     """A "consumer" handler to be used by charms that relate to Karma (the 'requires' side of the 'karma' relation).
-    This library offers the interface needed in order to provide Alertmanager URIs and associated information to the
+    This library offers the interface needed in order to provide Alertmanager URLs and associated information to the
     Karma application.
 
-    To have your charm provide URIs to Karma, declare the interface's use in your charm's metadata.yaml file:
+    To have your charm provide URLs to Karma, declare the interface's use in your charm's metadata.yaml file:
 
     ```yaml
     requires:
@@ -192,7 +212,7 @@ class KarmaConsumer(ConsumerBase):
     A typical example of importing this library might be
 
     ```python
-    from charms.alertmanager_karma.v0.karma import KarmaConsumer
+    from charms.karma_k8s.v0.karma import KarmaConsumer
     ```
 
     In your charm's `__init__` method:
@@ -201,18 +221,17 @@ class KarmaConsumer(ConsumerBase):
     self.karma_lib = KarmaConsumer(
         self,
         "karma-dashboard",
-        consumes={"karma": ">=0.0.1"},
+        consumes={"karma": ">=0.86"},
     )
     ```
 
-    The consumer charm is expected to set config via the consumer library, for example in config-changed:
+    The consumer charm is expected to set the target URL via the consumer library, for example in config-changed:
 
-        if not self.karma_lib.set_config(config):
-            logger.warning("Invalid config: %s", config)
+        self.karma_lib.target = "http://whatever:9093"
 
     The consumer charm can then obtain the configured IP address, for example:
 
-        self.unit.status = ActiveStatus("Proxying {}".format(self.karma_lib.ip_address))
+        self.unit.status = ActiveStatus("Proxying {}".format(self.karma_lib.target))
 
     Arguments:
             charm (CharmBase): consumer charm
@@ -229,32 +248,47 @@ class KarmaConsumer(ConsumerBase):
     def __init__(self, charm, name: str, consumes: dict, multi: bool = False):
         super().__init__(charm, name, consumes, multi)
         self.charm = charm
+
+        # StoredState is used for holding the target URL.
+        # It is needed here because the target URL may be set by the consumer before any "karma-dashboard" relation is
+        # joined, in which case there are no relation unit data bags available for storing the target URL.
         self._stored.set_default(config={})
+
         events = self.charm.on[self.name]
         self.framework.observe(events.relation_joined, self._on_relation_joined)
 
     def _on_relation_joined(self, event: RelationJoinedEvent):
-        # update relation data bag
-        event.relation.data[self.charm.unit].update(self._stored.config)
+        self._update_relation_data(event)
 
     @property
     def config_valid(self):
         return KarmaAlertmanagerConfig.is_valid(self._stored.config)
 
     @property
-    def ip_address(self) -> Optional[str]:
+    def target(self) -> Optional[str]:
         return self._stored.config.get("uri", None)
 
-    def set_config(self, name: str, uri: str) -> bool:
-        if not (config := KarmaAlertmanagerConfig.build(name, uri)):
-            logger.warning("Invalid config: {%s, %s}", name, uri)
-            return False
+    @target.setter
+    def target(self, url: str):
+        name = self.charm.unit.name
+        cluster = "{}_{}".format(self.charm.model.name, self.charm.app.name)
+        if not (config := KarmaAlertmanagerConfig.build(name, url, cluster=cluster)):
+            logger.warning("Invalid config: {%s, %s}", name, url)
+            return
 
         self._stored.config.update(config)
-        logger.info("stored config: %s", self._stored.config)
+        logger.debug("stored karma config: %s", self._stored.config)
 
-        if self.model.unit.is_leader() and self.name in self.charm.model.relations:
-            for relation in self.charm.model.relations[self.name]:
-                relation.data[self.charm.unit].update(self._stored.config)
+        # target changed - must update all relation data
+        self._update_relation_data()
 
-        return True
+    def _update_relation_data(self, event: RelationJoinedEvent = None):
+        if event is None:
+            # update all existing relation data
+            # a single consumer charm's unit may be related to multiple karma dashboards
+            if self.name in self.charm.model.relations:
+                for relation in self.charm.model.relations[self.name]:
+                    relation.data[self.charm.unit].update(self._stored.config)
+        else:
+            # update relation data only for the newly joined relation
+            event.relation.data[self.charm.unit].update(self._stored.config)

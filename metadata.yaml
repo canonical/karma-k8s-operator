@@ -34,7 +34,7 @@ provides:
   dashboard:
     # Requirer's unit data bag should have the following keys:
     #  - name (e.g. "alertmanager-k8s/0")
-    #  - uri (e.g. "http://1.1.1.1:9093")
+    #  - url (e.g. "http://1.1.1.1:9093")
     interface: karma_dashboard
 
 peers:
