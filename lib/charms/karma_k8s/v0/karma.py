@@ -30,18 +30,46 @@ logger = logging.getLogger(__name__)
 
 
 class KarmaAlertmanagerConfig:
+    """A helper class for alertmanager server configuration for Karma.
+
+    Refer to the `Karma documentation`_ for full details.
+
+    .. _Karma documentation:
+        https://github.com/prymitive/karma/blob/main/docs/CONFIGURATION.md#alertmanagers
+    """
+
     required_fields = {"name", "uri"}
     optional_fields = {"cluster"}
     _supported_fields = required_fields | optional_fields
 
     @staticmethod
-    def is_valid(config: Dict[str, str]):
+    def is_valid(config: Dict[str, str]) -> bool:
+        """Validate alertmanager server configuration for Karma.
+
+        Args:
+            config: target configuration to be validated.
+
+        Returns:
+            True if all required keys are present and all remaining keys are supported optional fields; False otherwise.
+        """
         all_required = all(key in config for key in KarmaAlertmanagerConfig.required_fields)
         all_supported = all(key in KarmaAlertmanagerConfig._supported_fields for key in config)
         return all_required and all_supported
 
     @staticmethod
     def from_dict(data: Dict[str, str]) -> Dict[str, str]:
+        """Generate alertmanager server configuration from the given dict.
+
+        Configuration is constructed by creating a subset of the provided dictionary that contains only the supported
+        fields.
+
+        Args:
+            data: a dict that may contain alertmanager server configuration for Karma.
+
+        Returns:
+            A subset of `data` that contains all the supported fields found in `data`, if the resulting subset makes a
+            valid configuration; False otherwise.
+        """
         config = {k: data[k] for k in data if k in KarmaAlertmanagerConfig.required_fields}
         optional_config = {
             k: data[k] for k in data if data[k] and k in KarmaAlertmanagerConfig.optional_fields
@@ -51,7 +79,16 @@ class KarmaAlertmanagerConfig:
 
     @staticmethod
     def build(name: str, url: str, *, cluster=None) -> Dict[str, str]:
-        # https://github.com/prymitive/karma/blob/main/docs/CONFIGURATION.md#alertmanagers
+        """Build alertmanager server configuration for Karma
+
+        Args:
+            name: name for the alertmanager unit.
+            url: url of the alertmanager api server (including scheme and port)
+            cluster: name of a cluster to which the alertmanager unit belongs to (optional)
+
+        Returns:
+            Alertmanager server configuration for Karma.
+        """
         return KarmaAlertmanagerConfig.from_dict({"name": name, "uri": url, "cluster": cluster})
 
 
@@ -142,6 +179,15 @@ class KarmaProvider(ProviderBase):
         self._stored.set_default(active_relations=set())
 
     def get_alertmanager_servers(self) -> List[Dict[str, str]]:
+        """Return configuration data for all related alertmanager servers.
+
+        The exact spec is described in the Karma project documentation
+        https://github.com/prymitive/karma/blob/main/docs/CONFIGURATION.md#alertmanagers
+        Every item in the returned list represents an item under the "servers" yaml section.
+
+        Returns:
+            List of server configurations, in the format prescribed by the Karma project
+        """
         servers = []
 
         logger.debug("relations for %s: %s", self.name, self.charm.model.relations[self.name])
@@ -180,6 +226,11 @@ class KarmaProvider(ProviderBase):
 
     @property
     def config_valid(self) -> bool:
+        """Check if the current configuration is valid.
+
+        Returns:
+            True if the currently stored configuration for an alertmanager target is valid; False otherwise.
+        """
         # karma will fail starting without alertmanager server(s), which would cause pebble to error out.
 
         # check that there is at least one alertmanager server configured
@@ -253,15 +304,30 @@ class KarmaConsumer(ConsumerBase):
         self._update_relation_data(event)
 
     @property
-    def config_valid(self):
+    def config_valid(self) -> bool:
+        """Check if the current configuration is valid.
+
+        Returns:
+            True if the currently stored configuration for an alertmanager target is valid; False otherwise.
+        """
         return KarmaAlertmanagerConfig.is_valid(self._stored.config)
 
     @property
     def target(self) -> Optional[str]:
+        """str: Alertmanager URL to be used by Karma"""
         return self._stored.config.get("uri", None)
 
     @target.setter
-    def target(self, url: str):
+    def target(self, url: str) -> None:
+        """Configure an alertmanager target server to be used by Karma.
+        Apart from the server's URL, the server configuration is determined from the juju topology.
+
+        Args:
+            url: Complete URL (scheme and port) of the target alertmanager server.
+
+        Returns:
+            None.
+        """
         name = self.charm.unit.name
         cluster = "{}_{}".format(self.charm.model.name, self.charm.app.name)
         if not (config := KarmaAlertmanagerConfig.build(name, url, cluster=cluster)):
