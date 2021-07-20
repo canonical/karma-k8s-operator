@@ -127,7 +127,6 @@ class AlertmanagerKarmaCharm(CharmBase):
           True if config changed; False otherwise
         """
         alertmanagers = self.provider.get_alertmanager_servers()
-        logger.info("alertmanagers=%s", alertmanagers)
         config = {
             "alertmanager": {"servers": alertmanagers},
             "listen": {"port": self.port},

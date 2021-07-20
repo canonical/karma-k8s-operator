@@ -10,7 +10,7 @@ import logging
 
 import ops.charm
 from ops.framework import EventBase, EventSource, ObjectEvents
-from ops.charm import RelationJoinedEvent, RelationDepartedEvent, RelationBrokenEvent
+from ops.charm import RelationJoinedEvent, RelationDepartedEvent
 from ops.relation import ConsumerBase, ProviderBase
 from ops.framework import StoredState
 
@@ -165,7 +165,6 @@ class KarmaProvider(ProviderBase):
     """
 
     on = KarmaProviderEvents()
-    _stored = StoredState()
 
     def __init__(self, charm, name: str, service_name: str, version: str = None):
         super().__init__(charm, name, service_name, version)
@@ -173,10 +172,8 @@ class KarmaProvider(ProviderBase):
         self._service_name = service_name
 
         events = self.charm.on[self.name]
-        self.framework.observe(events.relation_joined, self._on_relation_joined)
         self.framework.observe(events.relation_changed, self._on_relation_changed)
         self.framework.observe(events.relation_departed, self._on_relation_departed)
-        self._stored.set_default(active_relations=set())
 
     def get_alertmanager_servers(self) -> List[Dict[str, str]]:
         """Return configuration data for all related alertmanager servers.
@@ -192,11 +189,6 @@ class KarmaProvider(ProviderBase):
 
         logger.debug("relations for %s: %s", self.name, self.charm.model.relations[self.name])
         for relation in self.charm.model.relations[self.name]:
-            if relation.id not in self._stored.active_relations:
-                # relation id is not present in the set of active relations
-                # this probably means that RelationBroken did not exit yet (was recently removed)
-                continue
-
             # get data from related application
             for key in relation.data:
                 if key is not self.charm.unit and isinstance(key, ops.charm.model.Unit):
@@ -207,21 +199,12 @@ class KarmaProvider(ProviderBase):
 
         return servers  # TODO sorted
 
-    def _on_relation_joined(self, event: RelationJoinedEvent):
-        self._stored.active_relations.add(event.relation.id)
-        self.on.alertmanager_config_changed.emit()
-
     def _on_relation_changed(self, event):
-        self._stored.active_relations.add(event.relation.id)
         self.on.alertmanager_config_changed.emit()
 
     def _on_relation_departed(self, event: RelationDepartedEvent):
         """Hook is called when a unit leaves, but another unit may still be present"""
-        self.on.alertmanager_config_changed.emit()
-
-    def _on_relation_broken(self, event: RelationBrokenEvent):
-        """Hook is called when an application or the relation itself are removed"""
-        self._stored.active_relations -= {event.relation.id}
+        # At this point the unit data bag of the departing unit is gone from relation data
         self.on.alertmanager_config_changed.emit()
 
     @property
@@ -235,7 +218,6 @@ class KarmaProvider(ProviderBase):
 
         # check that there is at least one alertmanager server configured
         servers = self.get_alertmanager_servers()
-        logger.debug("config_valid: servers = %s", servers)
         return len(servers) > 0
 
 
