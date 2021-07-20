@@ -56,7 +56,6 @@ tox -e lint
 tox -e unit
 ```
 
-
 ## Build charm
 
 Install the charmcraft tool
@@ -68,7 +67,13 @@ Build the charm in this git repository using
     charmcraft pack
 
 ## Usage
-TODO
+### Tested images
+- [ghcr.io/prymitive/karma](https://ghcr.io/prymitive/karma)
+
+### Deploy Karma
+
+    juju deploy ./karma-k8s.charm \
+      --resource karma-image=ghcr.io/prymitive/karma:v0.87
 
 ## Code overview
 TODO
