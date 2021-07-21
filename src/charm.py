@@ -97,7 +97,7 @@ class AlertmanagerKarmaCharm(CharmBase):
             return False
 
         if not self.provider.config_valid:
-            self.unit.status = BlockedStatus("Waiting for valid config")
+            self.unit.status = BlockedStatus("Waiting for a dashboard relation")
             return False
 
         # Update pebble layer
