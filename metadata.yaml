@@ -1,7 +1,7 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 name: karma-k8s
-display-name: Karma
+display-name: Karma K8S
 description: |
   Alertmanager UI is useful for browsing alerts and managing silences, but it's
   lacking as a dashboard tool - karma aims to fill this gap.  This charm deploys
