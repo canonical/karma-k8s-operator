@@ -16,6 +16,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.pebble import ChangeError
 
+from kubernetes_service import K8sServicePatch, PatchFailed
 from typing import Optional, Dict, Any
 import logging
 import requests
@@ -48,11 +49,19 @@ class AlertmanagerKarmaCharm(CharmBase):
         super().__init__(*args)
         self.container = self.unit.get_container(self._container_name)
 
+        self.framework.observe(self.on.install, self._on_install)
+        self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
+
         self.framework.observe(self.on.karma_pebble_ready, self._on_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.start, self._on_start)
 
-        self._stored.set_default(servers={}, pebble_ready=False, config_hash=None)
+        self._stored.set_default(
+            servers={},
+            pebble_ready=False,
+            config_hash=None,
+            k8s_service_patched=False,
+        )
 
         # TODO obtain version from karma (if ever gets added to its HTTP API)
         self.provider = KarmaProvider(self, "dashboard", self._service_name, "0.86")
@@ -179,6 +188,11 @@ class AlertmanagerKarmaCharm(CharmBase):
 
         return self.config["external_hostname"] or f"{self.app.name}.juju"
 
+    @property
+    def _port(self):
+        """Return the default Karma port."""
+        return 8080
+
     def _karma_layer(self) -> Dict[str, Any]:
         """Returns the Pebble configuration layer for Karma."""
         return {
@@ -194,6 +208,28 @@ class AlertmanagerKarmaCharm(CharmBase):
                 },
             },
         }
+
+    def _on_install(self, _):
+        """Event handler for the install event during which we will update the K8s service"""
+        self._patch_k8s_service()
+
+    def _on_upgrade_charm(self, _):
+        """Event handler for the upgrade_charm event during which we will update the K8s service"""
+        self._patch_k8s_service()
+
+    def _patch_k8s_service(self):
+        """Fix the Kubernetes service that was setup by Juju with correct port numbers"""
+        if self.unit.is_leader() and not self._stored.k8s_service_patched:
+            service_ports = [
+                (f"{self.app.name}", self._port, self._port),
+            ]
+            try:
+                K8sServicePatch.set_ports(self.app.name, service_ports)
+            except PatchFailed as e:
+                logger.error("Unable to patch the Kubernetes service: %s", str(e))
+            else:
+                self._stored.k8s_service_patched = True
+                logger.info("Successfully patched the Kubernetes service!")
 
     def _on_pebble_ready(self, event):
         self._stored.pebble_ready = True
