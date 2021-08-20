@@ -56,12 +56,7 @@ class AlertmanagerKarmaCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.start, self._on_start)
 
-        self._stored.set_default(
-            servers={},
-            pebble_ready=False,
-            config_hash=None,
-            k8s_service_patched=False,
-        )
+        self._stored.set_default(servers={}, pebble_ready=False, config_hash=None)
 
         # TODO obtain version from karma (if ever gets added to its HTTP API)
         self.provider = KarmaProvider(self, "dashboard", self._service_name, "0.86")
@@ -219,7 +214,7 @@ class AlertmanagerKarmaCharm(CharmBase):
 
     def _patch_k8s_service(self):
         """Fix the Kubernetes service that was setup by Juju with correct port numbers"""
-        if self.unit.is_leader() and not self._stored.k8s_service_patched:
+        if self.unit.is_leader():
             service_ports = [
                 (f"{self.app.name}", self._port, self._port),
             ]
@@ -228,7 +223,6 @@ class AlertmanagerKarmaCharm(CharmBase):
             except PatchFailed as e:
                 logger.error("Unable to patch the Kubernetes service: %s", str(e))
             else:
-                self._stored.k8s_service_patched = True
                 logger.info("Successfully patched the Kubernetes service!")
 
     def _on_pebble_ready(self, event):
