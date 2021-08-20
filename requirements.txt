@@ -6,3 +6,4 @@ chardet
 urllib3
 idna
 semantic_version
+kubernetes
