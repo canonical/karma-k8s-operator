@@ -4,9 +4,7 @@
 import shutil
 import tempfile
 import unittest
-from unittest.mock import Mock
 
-import requests
 from charms.karma_k8s.v0.karma import KarmaAlertmanagerConfig
 from ops.model import ActiveStatus
 from ops.testing import Harness
@@ -44,17 +42,7 @@ class TestCharm(unittest.TestCase):
         self.assertTrue(service.is_running())
         self.assertEqual(self.harness.model.unit.status, ActiveStatus())
 
-    @unittest.mock.patch.object(requests.Session, "get")
-    def test_check_karma_service_alive(self, mock_requests):
-        mockresponse = Mock()
-        mockresponse.text = "Pong\n"
-        mockresponse.status_code = 200
-        mock_requests.return_value = mockresponse
-        alive = self.harness.charm._check_karma_service_alive()
-        self.assertTrue(alive)
-
     @unittest.skip("out of date")  # FIXME
-    @unittest.mock.patch.object(KarmaCharm, "_check_karma_service_alive")
     def test_karma_pebble_ready(self, mock_check_karma):
         mock_check_karma.return_value = True
         # Check the initial Pebble plan is empty

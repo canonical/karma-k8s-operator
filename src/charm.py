@@ -9,7 +9,6 @@ import logging
 from typing import Any, Dict, Optional
 
 import ops
-import requests
 import yaml
 from charms.karma_k8s.v0.karma import KarmaProvider
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
@@ -18,9 +17,8 @@ from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.pebble import ChangeError
-from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
 
+from karma_client import Karma
 from kubernetes_service import K8sServicePatch, PatchFailed
 
 logger = logging.getLogger(__name__)
@@ -40,7 +38,7 @@ class KarmaCharm(CharmBase):
     _layer_name = "karma"  # layer label argument for container.add_layer
     _service_name = "karma"  # chosen arbitrarily to match charm name
     _peer_relation_name = "replicas"  # must match metadata.yaml peer role name
-    port = 8080  # web interface
+    _port = 8080  # web interface
     config_file = "/srv/karma.yaml"
 
     _stored = StoredState()
@@ -73,6 +71,8 @@ class KarmaCharm(CharmBase):
                 "service-port": self.port,
             },
         )
+
+        self.api = Karma(port=self.port)
 
     @property
     def peer_relation(self) -> Optional[ops.model.Relation]:
@@ -185,9 +185,9 @@ class KarmaCharm(CharmBase):
         return self.config["external_hostname"] or f"{self.app.name}.juju"
 
     @property
-    def _port(self):
+    def port(self):
         """Return the default Karma port."""
-        return 8080
+        return self._port
 
     def _karma_layer(self) -> Dict[str, Any]:
         """Returns the Pebble configuration layer for Karma."""
@@ -240,20 +240,6 @@ class KarmaCharm(CharmBase):
         """
         self._common_exit_hook()
 
-    def _check_karma_service_alive(self) -> bool:
-        """Check that the Karma web port is listening."""
-        retry_strategy = Retry(total=3, backoff_factor=1)
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        http = requests.Session()
-        http.mount("https://", adapter)
-        http.mount("http://", adapter)
-        r = http.get(f"http://localhost:{self.port}/health", timeout=3)
-
-        if r.status_code == 200 and r.text == "Pong\n":
-            return True
-        else:
-            return False
-
     def _on_config_changed(self, _):
         """Event handler for ConfigChangedEvent"""
         self._common_exit_hook()
@@ -282,7 +268,7 @@ class KarmaCharm(CharmBase):
                 self.container.stop(self._service_name)
             self.container.start(self._service_name)
 
-            if self._check_karma_service_alive():
+            if self.api.healthy:
                 return True
             else:
                 logger.warning("Service restarted but karma server does not respond")
