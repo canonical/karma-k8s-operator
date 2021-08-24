@@ -135,10 +135,7 @@ class KarmaCharm(CharmBase):
           True if config changed; False otherwise
         """
         alertmanagers = self.provider.get_alertmanager_servers()
-        config = {
-            "alertmanager": {"servers": alertmanagers},
-            "listen": {"port": self.port},
-        }
+        config = {"alertmanager": {"servers": alertmanagers}, "listen": {"port": self.port}}
         config_yaml = yaml.safe_dump(config)
         config_hash = sha256(config_yaml)
 
