@@ -27,7 +27,7 @@ class TestKarmaAlertmanagerConfig(unittest.TestCase):
 
 class TestCharm(unittest.TestCase):
     def setUp(self):
-        self.harness = Harness(AlertmanagerKarmaCharm)
+        self.harness = Harness(KarmaCharm)
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
         self.test_dir = tempfile.mkdtemp()
@@ -53,7 +53,7 @@ class TestCharm(unittest.TestCase):
         self.assertTrue(alive)
 
     @unittest.skip("out of date")  # FIXME
-    @unittest.mock.patch.object(AlertmanagerKarmaCharm, "_check_karma_service_alive")
+    @unittest.mock.patch.object(KarmaCharm, "_check_karma_service_alive")
     def test_karma_pebble_ready(self, mock_check_karma):
         mock_check_karma.return_value = True
         # Check the initial Pebble plan is empty
