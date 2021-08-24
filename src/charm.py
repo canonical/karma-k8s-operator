@@ -4,24 +4,24 @@
 
 """Deploy Karma to a Kubernetes environment."""
 
-from charms.karma_k8s.v0.karma import KarmaProvider
-from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
+import hashlib
+import logging
+from typing import Any, Dict, Optional
 
 import ops
+import requests
+import yaml
+from charms.karma_k8s.v0.karma import KarmaProvider
+from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.pebble import ChangeError
-
-from kubernetes_service import K8sServicePatch, PatchFailed
-from typing import Optional, Dict, Any
-import logging
-import requests
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
-import yaml
-import hashlib
+
+from kubernetes_service import K8sServicePatch, PatchFailed
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ def sha256(hashable) -> str:
 
 class KarmaCharm(CharmBase):
     """A Juju charm for Karma"""
+
     _container_name = "karma"  # automatically determined from charm name
     _layer_name = "karma"  # layer label argument for container.add_layer
     _service_name = "karma"  # chosen arbitrarily to match charm name

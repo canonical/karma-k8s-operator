@@ -7,10 +7,11 @@ import unittest
 from unittest.mock import Mock
 
 import requests
-from charm import KarmaCharm
 from charms.karma_k8s.v0.karma import KarmaAlertmanagerConfig
 from ops.model import ActiveStatus
 from ops.testing import Harness
+
+from charm import KarmaCharm
 
 
 class TestKarmaAlertmanagerConfig(unittest.TestCase):

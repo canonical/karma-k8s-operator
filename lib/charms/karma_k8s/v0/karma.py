@@ -8,14 +8,12 @@ This library is designed to be used by a charm consuming or providing the karma-
 """
 
 import logging
+from typing import Dict, List, Optional
 
 import ops.charm
-from ops.framework import EventBase, EventSource, ObjectEvents
-from ops.charm import RelationJoinedEvent, RelationDepartedEvent
+from ops.charm import RelationDepartedEvent, RelationJoinedEvent
+from ops.framework import EventBase, EventSource, ObjectEvents, StoredState
 from ops.relation import ConsumerBase, ProviderBase
-from ops.framework import StoredState
-
-from typing import List, Dict, Optional
 
 # The unique Charmhub library identifier, never change it
 LIBID = "abcdef1234"
@@ -99,6 +97,7 @@ class KarmaAlertmanagerConfigChanged(EventBase):
     If an alertmanager unit is added to or removed from a relation,
     then a :class:`KarmaAlertmanagerConfigChanged` should be emitted.
     """
+
     def __init__(self, handle, data=None):
         super().__init__(handle)
         self.data = data
