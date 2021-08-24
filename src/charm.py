@@ -33,7 +33,8 @@ def sha256(hashable) -> str:
     return hashlib.sha256(hashable).hexdigest()
 
 
-class AlertmanagerKarmaCharm(CharmBase):
+class KarmaCharm(CharmBase):
+    """A Juju charm for Karma"""
     _container_name = "karma"  # automatically determined from charm name
     _layer_name = "karma"  # layer label argument for container.add_layer
     _service_name = "karma"  # chosen arbitrarily to match charm name
@@ -74,7 +75,10 @@ class AlertmanagerKarmaCharm(CharmBase):
 
     @property
     def peer_relation(self) -> Optional[ops.model.Relation]:
-        # Returns None if called too early, e.g. during install.
+        """Helper function for obtaining the peer relation object.
+
+        Returns: peer relation object; returns None if called too early, e.g. during install.
+        """
         return self.model.get_relation(self._peer_relation_name)
 
     @property
@@ -89,6 +93,7 @@ class AlertmanagerKarmaCharm(CharmBase):
         return bind_address
 
     def _common_exit_hook(self) -> bool:
+        """Event processing hook that is common to all events to ensure idempotency."""
         if not self._stored.pebble_ready:
             self.unit.status = MaintenanceStatus("Waiting for pod startup to complete")
             return False
@@ -224,12 +229,17 @@ class AlertmanagerKarmaCharm(CharmBase):
                 logger.info("Successfully patched the Kubernetes service")
 
     def _on_pebble_ready(self, event):
+        """Event handler for PebbleReadyEvent"""
         self._stored.pebble_ready = True
         self._common_exit_hook()
 
     def _on_start(self, _):
-        # With Juju 2.9.5 encountered a scenario in which pebble_ready and config_changed fired, but IP address was not
-        # available and the status was stuck on "Waiting for IP address". Adding this hook as a workaround.
+        """Event handler for StartEvent
+
+        With Juju 2.9.5 encountered a scenario in which pebble_ready and config_changed fired,
+        but IP address was not available and the status was stuck on "Waiting for IP address".
+        Adding this hook reduce the likelihood of that scenario.
+        """
         self._common_exit_hook()
 
     def _check_karma_service_alive(self) -> bool:
@@ -247,9 +257,11 @@ class AlertmanagerKarmaCharm(CharmBase):
             return False
 
     def _on_config_changed(self, _):
+        """Event handler for ConfigChangedEvent"""
         self._common_exit_hook()
 
     def _on_alertmanager_config_changed(self, _):
+        """Event handler for :class:`KarmaAlertmanagerConfigChanged`"""
         self._common_exit_hook()
 
     @property
@@ -263,6 +275,7 @@ class AlertmanagerKarmaCharm(CharmBase):
         return self.container.get_service(self._service_name).is_running()
 
     def _restart_service(self) -> bool:
+        """Helper function for restarting the underlying service."""
         logger.info("Restarting service %s", self._service_name)
 
         try:
@@ -289,4 +302,4 @@ class AlertmanagerKarmaCharm(CharmBase):
 
 
 if __name__ == "__main__":
-    main(AlertmanagerKarmaCharm, use_juju_for_storage=True)
+    main(KarmaCharm, use_juju_for_storage=True)

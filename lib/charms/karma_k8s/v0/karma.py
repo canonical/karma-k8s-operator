@@ -94,6 +94,11 @@ class KarmaAlertmanagerConfig:
 
 
 class KarmaAlertmanagerConfigChanged(EventBase):
+    """Event raised when karma configuration is changed.
+
+    If an alertmanager unit is added to or removed from a relation,
+    then a :class:`KarmaAlertmanagerConfigChanged` should be emitted.
+    """
     def __init__(self, handle, data=None):
         super().__init__(handle)
         self.data = data
@@ -201,6 +206,7 @@ class KarmaProvider(ProviderBase):
         return servers  # TODO sorted
 
     def _on_relation_changed(self, event):
+        """Event handler for RelationChangedEvent"""
         self.on.alertmanager_config_changed.emit()
 
     def _on_relation_departed(self, event: RelationDepartedEvent):
@@ -324,6 +330,16 @@ class KarmaConsumer(ConsumerBase):
         self._update_relation_data()
 
     def _update_relation_data(self, event: RelationJoinedEvent = None):
+        """Helper function for updating relation data bags.
+
+        This function can be used in two different ways:
+        - update relation data bag of a given event (e.g. a newly joined relation);
+        - update relation data for all relations
+
+        Args:
+            event: The event whose data bag needs to be updated. If it is None, update data bags of
+            all relations.
+        """
         if event is None:
             # update all existing relation data
             # a single consumer charm's unit may be related to multiple karma dashboards
