@@ -1,6 +1,7 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-git+https://github.com/canonical/operator/#egg=ops
+#git+https://github.com/canonical/operator/#egg=ops
+git+https://github.com/rbarry82/operator@fix/restart#egg=ops
 PyYAML
 kubernetes

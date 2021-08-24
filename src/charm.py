@@ -16,7 +16,6 @@ from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
-from ops.pebble import ChangeError
 
 from karma_client import Karma
 from kubernetes_service import K8sServicePatch, PatchFailed
@@ -107,7 +106,7 @@ class KarmaCharm(CharmBase):
             return False
 
         # Update pebble layer
-        try:
+        if self.container.is_ready():
             config_changed = self._update_config()
             layer_changed = self._update_layer(restart=False)
             if layer_changed or config_changed or not self.is_service_running:
@@ -115,9 +114,9 @@ class KarmaCharm(CharmBase):
                     self.unit.status = BlockedStatus("Service restart failed")
                     return False
 
-        except ChangeError as e:
-            logger.error("Pebble error: %s", str(e))
-            self.unit.status = BlockedStatus("Pebble error")
+        else:
+            logger.error("Alertmanager container not ready")
+            self.unit.status = BlockedStatus("Alertmanager container not ready")
             return False
 
         self.provider.ready()
@@ -260,27 +259,23 @@ class KarmaCharm(CharmBase):
         """Helper function for restarting the underlying service."""
         logger.info("Restarting service %s", self._service_name)
 
+        if not self.container.is_ready():
+            logger.error("Cannot (re)start service: container is not ready.")
+            return False
+
         try:
             # if the service does not exist, ModelError will be raised
-            if self.is_service_running:
-                self.container.stop(self._service_name)
-            self.container.start(self._service_name)
+            self.container.restart(self._service_name)
 
             if self.api.healthy:
                 return True
             else:
-                logger.warning("Service restarted but karma server does not respond")
+                logger.error("Service restarted but karma server does not respond")
                 return False
 
         except ops.model.ModelError:
             logger.warning("Service does not (yet?) exist; (re)start aborted")
             return False
-        except ChangeError as e:
-            logger.error("ChangeError: failed to (re)start service: %s", str(e))
-            return False
-        except Exception as e:
-            logger.error("failed to (re)start service: %s", str(e))
-            raise
 
 
 if __name__ == "__main__":
