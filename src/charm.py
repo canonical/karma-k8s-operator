@@ -45,19 +45,19 @@ class KarmaCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
+        self._stored.set_default(servers={}, pebble_ready=False, config_hash=None)
+        self.api = Karma(port=self.port)
+        self.provider = KarmaProvider(self, "dashboard", self._service_name, self.api.version)
         self.container = self.unit.get_container(self._container_name)
 
+        # Core lifecycle events
         self.framework.observe(self.on.install, self._on_install)
-        self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
-
-        self.framework.observe(self.on.karma_pebble_ready, self._on_pebble_ready)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
+        self.framework.observe(self.on.karma_pebble_ready, self._on_pebble_ready)
         self.framework.observe(self.on.start, self._on_start)
 
-        self._stored.set_default(servers={}, pebble_ready=False, config_hash=None)
-
-        # TODO obtain version from karma (if ever gets added to its HTTP API)
-        self.provider = KarmaProvider(self, "dashboard", self._service_name, "0.86")
+        # Custom events
         self.framework.observe(
             self.provider.on.alertmanager_config_changed, self._on_alertmanager_config_changed
         )
@@ -71,8 +71,6 @@ class KarmaCharm(CharmBase):
                 "service-port": self.port,
             },
         )
-
-        self.api = Karma(port=self.port)
 
     @property
     def peer_relation(self) -> Optional[ops.model.Relation]:

@@ -2,9 +2,13 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import json
+import logging
 import urllib.error
 import urllib.parse
 import urllib.request
+
+logger = logging.getLogger(__name__)
 
 
 class Karma:
@@ -18,10 +22,10 @@ class Karma:
         try:
             response = urllib.request.urlopen(url, data=None, timeout=timeout)
             if response.code == 200:
-                text = response.readlines()
+                text = response.read()
             else:
                 text = None
-        except (ValueError, urllib.error.HTTPError):
+        except (ValueError, urllib.error.HTTPError, urllib.error.URLError):
             text = None
         return text
 
@@ -30,3 +34,26 @@ class Karma:
         """Check that the Karma web port is listening."""
         url = urllib.parse.urljoin(self.base_url, "/health")
         return bool(self._get(url, timeout=self.timeout))
+
+    @property
+    def version(self) -> str:
+        """
+        Retrieve version information from a running Karma server.
+
+        Response looks like this:
+            {
+              "version": "v0.90",
+              "golang": "go1.16.7"
+            }
+        """
+        url = urllib.parse.urljoin(self.base_url, "/version")
+
+        if version_info := self._get(url, timeout=self.timeout):
+            logger.info("version_info: %s", version_info)
+            version_info = json.loads(version_info)
+            karma_version = version_info["version"]
+            karma_version_number = karma_version[1:]  # to drop the leading "v"
+        else:
+            karma_version_number = "0.0.0"
+
+        return karma_version_number
