@@ -1,7 +1,5 @@
 # Copyright 2021 Xav Paice
 # See LICENSE file for licensing details.
-#
-# Learn more about testing at: https://juju.is/docs/sdk/testing
 
 import shutil
 import tempfile
