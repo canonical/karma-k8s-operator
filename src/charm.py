@@ -241,7 +241,7 @@ class AlertmanagerKarmaCharm(CharmBase):
         http = requests.Session()
         http.mount("https://", adapter)
         http.mount("http://", adapter)
-        r = http.get("http://localhost:{}/health".format(self.port), timeout=3)
+        r = http.get(f"http://localhost:{self.port}/health", timeout=3)
 
         if r.status_code == 200 and r.text == "Pong\n":
             return True

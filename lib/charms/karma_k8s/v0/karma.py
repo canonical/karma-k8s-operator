@@ -311,7 +311,7 @@ class KarmaConsumer(ConsumerBase):
             None.
         """
         name = self.charm.unit.name
-        cluster = "{}_{}".format(self.charm.model.name, self.charm.app.name)
+        cluster = f"{self.charm.model.name}_{self.charm.app.name}"
         if not (config := KarmaAlertmanagerConfig.build(name, url, cluster=cluster)):
             logger.warning("Invalid config: {%s, %s}", name, url)
             return
