@@ -24,14 +24,14 @@ logger = logging.getLogger(__name__)
 
 
 def sha256(hashable) -> str:
-    """Use instead of the builtin hash() for repeatable values"""
+    """Use instead of the builtin hash() for repeatable values."""
     if isinstance(hashable, str):
         hashable = hashable.encode("utf-8")
     return hashlib.sha256(hashable).hexdigest()
 
 
 class KarmaCharm(CharmBase):
-    """A Juju charm for Karma"""
+    """A Juju charm for Karma."""
 
     _container_name = "karma"  # automatically determined from charm name
     _layer_name = "karma"  # layer label argument for container.add_layer
@@ -126,8 +126,10 @@ class KarmaCharm(CharmBase):
 
     def _update_config(self) -> bool:
         """Update the karma yml config file to reflect changes in configuration.
+
         Args:
           None
+
         Returns:
           True if config changed; False otherwise
         """
@@ -146,8 +148,10 @@ class KarmaCharm(CharmBase):
 
     def _update_layer(self, restart: bool = True) -> bool:
         """Update service layer to reflect changes in peers (replicas).
+
         Args:
           restart: a flag indicating if the service should be restarted if a change was detected.
+
         Returns:
           True if anything changed; False otherwise
         """
@@ -203,15 +207,15 @@ class KarmaCharm(CharmBase):
         }
 
     def _on_install(self, _):
-        """Event handler for the install event during which we will update the K8s service"""
+        """Event handler for the install event during which we will update the K8s service."""
         self._patch_k8s_service()
 
     def _on_upgrade_charm(self, _):
-        """Event handler for the upgrade_charm event during which we will update the K8s service"""
+        """Event handler for the upgrade event during which we will update the K8s service."""
         self._patch_k8s_service()
 
     def _patch_k8s_service(self):
-        """Fix the Kubernetes service that was setup by Juju with correct port numbers"""
+        """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
         if self.unit.is_leader():
             service_ports = [
                 (f"{self.app.name}", self._port, self._port),
@@ -223,13 +227,13 @@ class KarmaCharm(CharmBase):
             else:
                 logger.info("Successfully patched the Kubernetes service")
 
-    def _on_pebble_ready(self, event):
-        """Event handler for PebbleReadyEvent"""
+    def _on_pebble_ready(self, _):
+        """Event handler for PebbleReadyEvent."""
         self._stored.pebble_ready = True
         self._common_exit_hook()
 
     def _on_start(self, _):
-        """Event handler for StartEvent
+        """Event handler for StartEvent.
 
         With Juju 2.9.5 encountered a scenario in which pebble_ready and config_changed fired,
         but IP address was not available and the status was stuck on "Waiting for IP address".
@@ -238,18 +242,20 @@ class KarmaCharm(CharmBase):
         self._common_exit_hook()
 
     def _on_config_changed(self, _):
-        """Event handler for ConfigChangedEvent"""
+        """Event handler for ConfigChangedEvent."""
         self._common_exit_hook()
 
     def _on_alertmanager_config_changed(self, _):
-        """Event handler for :class:`KarmaAlertmanagerConfigChanged`"""
+        """Event handler for :class:`KarmaAlertmanagerConfigChanged`."""
         self._common_exit_hook()
 
     @property
     def is_service_running(self) -> bool:
         """Helper function for checking if the alertmanager service is running.
+
         Returns:
           True if the service is running; False otherwise.
+
         Raises:
           ModelError: If the service is not defined (e.g. layer does not exist).
         """
