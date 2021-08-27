@@ -1,5 +1,5 @@
 # Contributing to karma-operator
-The intended use case of this operator is to be deployed together with 
+The intended use case of this operator is to be deployed together with
 alertmanager-operator or karma-alertmanager-proxy-operator.
 
 ## Bugs and pull requests
@@ -17,15 +17,13 @@ alertmanager-operator or karma-alertmanager-proxy-operator.
 - All enhancements require review before being merged. Besides the
   code quality and test coverage, the review will also take into
   account the resulting user experience for Juju administrators using
-  this charm. Please help us out in having easier reviews by rebasing
-  onto the `main` branch, avoid merge commits and enjoy a linear Git
-  history.
+  this charm.
 
 
 ## Setup
 
 A typical setup using [snaps](https://snapcraft.io/), for deployments
-to a [microk8s](https://microk8s.io/) cluster can be found in the 
+to a [microk8s](https://microk8s.io/) cluster can be found in the
 [Juju docs](https://juju.is/docs/olm/microk8s).
 
 ## Developing
@@ -33,38 +31,44 @@ to a [microk8s](https://microk8s.io/) cluster can be found in the
 Use your existing Python 3 development environment or create and
 activate a Python 3 virtualenv
 
-    virtualenv -p python3 venv
-    source venv/bin/activate
+```shell
+virtualenv -p python3 venv
+source venv/bin/activate
+```
 
 Install the development requirements
 
-    pip install -r requirements-dev.txt
+```shell
+pip install -r requirements.txt
+```
 
 Later on, upgrade packages as needed
 
-    pip install --upgrade -r requirements-dev.txt
-
+```shell
+pip install --upgrade -r requirements.txt
+```
 
 ### Testing
 
-    ./run_tests
-
-If you wish to skip unit or lint tests, you can run either or both of:
-
 ```bash
-tox -e lint
-tox -e unit
+tox -e lint  # code style
+tox -e static  # static analysis
+tox -e unit  # unit tests
 ```
 
 ## Build charm
 
 Install the charmcraft tool
 
-    sudo snap install charmcraft
+```shell
+sudo snap install charmcraft
+```
 
 Build the charm in this git repository using
 
-    charmcraft pack
+```shell
+charmcraft pack
+```
 
 ## Usage
 ### Tested images
@@ -72,8 +76,10 @@ Build the charm in this git repository using
 
 ### Deploy Karma
 
+```shell
     juju deploy ./karma-k8s.charm \
       --resource karma-image=ghcr.io/prymitive/karma:v0.87
+```
 
 ## Code overview
 TODO
