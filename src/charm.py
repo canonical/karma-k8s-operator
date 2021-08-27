@@ -6,7 +6,7 @@
 
 import hashlib
 import logging
-from typing import Any, Dict, Optional
+from typing import Optional
 
 import yaml
 from charms.karma_k8s.v0.karma import KarmaProvider
@@ -15,6 +15,7 @@ from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
+from ops.pebble import Layer
 
 from karma_client import Karma
 from kubernetes_service import K8sServicePatch, PatchFailed
@@ -141,7 +142,7 @@ class KarmaCharm(CharmBase):
 
         return config_changed
 
-    def _update_layer(self, restart: bool = True) -> bool:
+    def _update_layer(self, restart: bool) -> bool:
         """Update service layer to reflect changes in peers (replicas).
 
         Args:
@@ -151,18 +152,10 @@ class KarmaCharm(CharmBase):
           True if anything changed; False otherwise
         """
         overlay = self._karma_layer()
-
         plan = self.container.get_plan()
-
         is_changed = False
-        # if this unit has just started, the services does not yet exist - using "get"
-        service = plan.services.get(self._service_name)
-        overlay_command = overlay["services"][self._service_name]["command"]
-        overlay_environment = overlay["services"][self._service_name]["environment"]
 
-        if service is None or any(
-            [service.command != overlay_command, service.environment != overlay_environment]
-        ):
+        if self._service_name not in plan.services or overlay.services != plan.services:
             is_changed = True
             self.container.add_layer(self._layer_name, overlay, combine=True)
 
@@ -185,21 +178,23 @@ class KarmaCharm(CharmBase):
         """Return the default Karma port."""
         return self._port
 
-    def _karma_layer(self) -> Dict[str, Any]:
+    def _karma_layer(self) -> Layer:
         """Returns the Pebble configuration layer for Karma."""
-        return {
-            "summary": "karma layer",
-            "description": "pebble config layer for karma",
-            "services": {
-                self._service_name: {
-                    "override": "replace",
-                    "summary": "karma service",
-                    "startup": "enabled",
-                    "command": "/karma",
-                    "environment": {"CONFIG_FILE": self.config_file},
+        return Layer(
+            {
+                "summary": "karma layer",
+                "description": "pebble config layer for karma",
+                "services": {
+                    self._service_name: {
+                        "override": "replace",
+                        "summary": "karma service",
+                        "startup": "enabled",
+                        "command": "/karma",
+                        "environment": {"CONFIG_FILE": self.config_file},
+                    },
                 },
-            },
-        }
+            }
+        )
 
     def _on_install(self, _):
         """Event handler for the install event during which we will update the K8s service."""
