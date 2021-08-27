@@ -68,7 +68,7 @@ class Karma:
         url = urllib.parse.urljoin(self.base_url, "/version")
 
         if version_info := self._get(url, timeout=self.timeout):
-            logger.info("version_info: %s", version_info)
+            logger.debug("version_info: %s", version_info)
             version_info = json.loads(version_info)
             karma_version = version_info["version"]
             karma_version_number = karma_version[1:]  # to drop the leading "v"

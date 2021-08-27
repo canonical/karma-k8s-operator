@@ -220,7 +220,7 @@ class KarmaCharm(CharmBase):
             except PatchFailed as e:
                 logger.error("Unable to patch the Kubernetes service: %s", str(e))
             else:
-                logger.info("Successfully patched the Kubernetes service")
+                logger.debug("Successfully patched the Kubernetes service")
 
     def _on_pebble_ready(self, _):
         """Event handler for PebbleReadyEvent."""
