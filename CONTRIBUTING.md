@@ -22,9 +22,8 @@ alertmanager-operator or karma-alertmanager-proxy-operator.
 
 ## Setup
 
-A typical setup using [snaps](https://snapcraft.io/), for deployments
-to a [microk8s](https://microk8s.io/) cluster can be found in the
-[Juju docs](https://juju.is/docs/olm/microk8s).
+A typical setup using [snaps](https://snapcraft.io/) can be found in the
+[Juju docs](https://juju.is/docs/sdk/dev-setup).
 
 ## Developing
 
@@ -50,19 +49,14 @@ pip install --upgrade -r requirements.txt
 
 ### Testing
 
-```bash
-tox -e lint  # code style
-tox -e static  # static analysis
-tox -e unit  # unit tests
+```shell
+tox -e prettify  # update your code according to linting rules
+tox -e lint      # code style
+tox -e static    # static analysis
+tox -e unit      # unit tests
 ```
 
 ## Build charm
-
-Install the charmcraft tool
-
-```shell
-sudo snap install charmcraft
-```
 
 Build the charm in this git repository using
 

@@ -8,7 +8,6 @@ import hashlib
 import logging
 from typing import Any, Dict, Optional
 
-import ops
 import yaml
 from charms.karma_k8s.v0.karma import KarmaProvider
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
@@ -102,8 +101,9 @@ class KarmaCharm(CharmBase):
         if self.container.is_ready():
             config_changed = self._update_config()
             layer_changed = self._update_layer(restart=False)
-            service_running = ((service := self.container.get_service(
-                self._service_name)) and service.is_running())
+            service_running = (
+                service := self.container.get_service(self._service_name)
+            ) and service.is_running()
             if layer_changed or config_changed or not service_running:
                 if not self._restart_service():
                     self.unit.status = BlockedStatus("Service restart failed")
