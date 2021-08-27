@@ -98,7 +98,7 @@ class KarmaCharm(CharmBase):
             return False
 
         # Update pebble layer
-        if self.container.is_ready():
+        with self.container.is_ready() as c:
             config_changed = self._update_config()
             layer_changed = self._update_layer(restart=False)
             service_running = (
@@ -109,7 +109,7 @@ class KarmaCharm(CharmBase):
                     self.unit.status = BlockedStatus("Service restart failed")
                     return False
 
-        else:
+        if not c.completed:
             logger.error("Alertmanager container not ready")
             self.unit.status = BlockedStatus("Alertmanager container not ready")
             return False
