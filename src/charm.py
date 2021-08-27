@@ -72,21 +72,14 @@ class KarmaCharm(CharmBase):
         )
 
     @property
-    def peer_relation(self) -> Optional[ops.model.Relation]:
-        """Helper function for obtaining the peer relation object.
-
-        Returns: peer relation object; returns None if called too early, e.g. during install.
-        """
-        return self.model.get_relation(self._peer_relation_name)
-
-    @property
     def private_address(self) -> Optional[str]:
         """Get the unit's ip address.
 
         Returns:
           None if no IP is available (called before unit "joined"); unit's ip address otherwise
         """
-        if bind_address := self.model.get_binding(self.peer_relation).network.bind_address:
+        peer_relation = self.model.get_relation(self._peer_relation_name)
+        if bind_address := self.model.get_binding(peer_relation).network.bind_address:
             bind_address = str(bind_address)
         return bind_address
 
@@ -109,7 +102,9 @@ class KarmaCharm(CharmBase):
         if self.container.is_ready():
             config_changed = self._update_config()
             layer_changed = self._update_layer(restart=False)
-            if layer_changed or config_changed or not self.is_service_running:
+            service_running = ((service := self.container.get_service(
+                self._service_name)) and service.is_running())
+            if layer_changed or config_changed or not service_running:
                 if not self._restart_service():
                     self.unit.status = BlockedStatus("Service restart failed")
                     return False
@@ -249,39 +244,28 @@ class KarmaCharm(CharmBase):
         """Event handler for :class:`KarmaAlertmanagerConfigChanged`."""
         self._common_exit_hook()
 
-    @property
-    def is_service_running(self) -> bool:
-        """Helper function for checking if the alertmanager service is running.
-
-        Returns:
-          True if the service is running; False otherwise.
-
-        Raises:
-          ModelError: If the service is not defined (e.g. layer does not exist).
-        """
-        return self.container.get_service(self._service_name).is_running()
-
     def _restart_service(self) -> bool:
         """Helper function for restarting the underlying service."""
         logger.info("Restarting service %s", self._service_name)
 
-        if not self.container.is_ready():
-            logger.error("Cannot (re)start service: container is not ready.")
-            return False
+        with self.container.is_ready() as c:
+            # Check if service exists, to avoid ModelError from being raised when the service does
+            # not exist,
+            if not c.get_services().get(self._service_name):
+                logger.error("Cannot (re)start service: service does not (yet) exist.")
+                return False
 
-        try:
-            # if the service does not exist, ModelError will be raised
             self.container.restart(self._service_name)
 
-            if self.api.healthy:
-                return True
-            else:
+            if not self.api.healthy:
                 logger.error("Service restarted but karma server does not respond")
                 return False
 
-        except ops.model.ModelError:
-            logger.warning("Service does not (yet?) exist; (re)start aborted")
+        if not c.completed:
+            logger.error("Cannot (re)start service: container is not ready.")
             return False
+
+        return True
 
 
 if __name__ == "__main__":
