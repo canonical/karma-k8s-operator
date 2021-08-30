@@ -44,7 +44,7 @@ class KarmaCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
-        self._stored.set_default(servers={}, pebble_ready=False, config_hash=None)
+        self._stored.set_default(servers={}, config_hash=None)
         self.api = Karma(port=self.port)
         self.provider = KarmaProvider(self, "dashboard", self._service_name, self.api.version)
         self.container = self.unit.get_container(self._container_name)
@@ -85,7 +85,7 @@ class KarmaCharm(CharmBase):
 
     def _common_exit_hook(self) -> bool:
         """Event processing hook that is common to all events to ensure idempotency."""
-        if not self._stored.pebble_ready:
+        if not self.container.is_ready():
             self.unit.status = MaintenanceStatus("Waiting for pod startup to complete")
             return False
 
@@ -219,7 +219,6 @@ class KarmaCharm(CharmBase):
 
     def _on_pebble_ready(self, _):
         """Event handler for PebbleReadyEvent."""
-        self._stored.pebble_ready = True
         self._common_exit_hook()
 
     def _on_start(self, _):
