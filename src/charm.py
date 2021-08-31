@@ -23,6 +23,13 @@ from kubernetes_service import K8sServicePatch, PatchFailed
 logger = logging.getLogger(__name__)
 
 
+def sha256(hashable) -> str:
+    """Use instead of the builtin hash() for repeatable values."""
+    if isinstance(hashable, str):
+        hashable = hashable.encode("utf-8")
+    return hashlib.sha256(hashable).hexdigest()
+
+
 class KarmaCharm(CharmBase):
     """A Juju charm for Karma."""
 
@@ -71,17 +78,17 @@ class KarmaCharm(CharmBase):
             },
         )
 
-    def _common_exit_hook(self) -> bool:
+    def _common_exit_hook(self) -> None:
         """Event processing hook that is common to all events to ensure idempotency."""
         if not self.container.is_ready():
             self.unit.status = MaintenanceStatus("Waiting for pod startup to complete")
-            return False
+            return
 
         if not self.provider.config_valid:
             self.unit.status = BlockedStatus(
                 "Waiting for a dashboard relation (e.g. alertmanager)"
             )
-            return False
+            return
 
         # Update pebble layer
         with self.container.is_ready() as c:
@@ -93,17 +100,15 @@ class KarmaCharm(CharmBase):
             if layer_changed or config_changed or not service_running:
                 if not self._restart_service():
                     self.unit.status = BlockedStatus("Service restart failed")
-                    return False
+                    return
 
         if not c.completed:
             logger.error("Alertmanager container not ready")
             self.unit.status = BlockedStatus("Alertmanager container not ready")
-            return False
+            return
 
         self.provider.ready()
         self.unit.status = ActiveStatus()
-
-        return True
 
     def _update_config(self) -> bool:
         """Update the karma yml config file to reflect changes in configuration.
@@ -117,15 +122,14 @@ class KarmaCharm(CharmBase):
         alertmanagers = self.provider.get_alertmanager_servers()
         config = {"alertmanager": {"servers": alertmanagers}, "listen": {"port": self.port}}
         config_yaml = yaml.safe_dump(config)
-        config_hash = hashlib.sha256(config_yaml).hexdigest()
+        config_hash = sha256(config_yaml)
 
-        config_changed = False
         if config_hash != self._stored.config_hash:
             self.container.push(self.config_file, config_yaml)
             self._stored.config_hash = config_hash
-            config_changed = True
+            return True
 
-        return config_changed
+        return False
 
     def _update_layer(self, restart: bool) -> bool:
         """Update service layer to reflect changes in peers (replicas).
@@ -187,7 +191,20 @@ class KarmaCharm(CharmBase):
 
     def _on_upgrade_charm(self, _):
         """Event handler for the upgrade event during which we will update the K8s service."""
+        # Ensure that older deployments of Karma run the logic to patch the K8s service
         self._patch_k8s_service()
+
+        # update config hash
+        with self.container.is_ready() as c:
+            self._stored.config_hash = sha256(
+                yaml.safe_dump(yaml.safe_load(self.container.pull(self.config_file)))
+            )
+        if not c.completed:
+            self._stored.config_hash = ""
+
+        # After upgrade (refresh), the unit ip address is not guaranteed to remain the same, and
+        # the config may need update. Calling the common hook to update.
+        self._common_exit_hook()
 
     def _patch_k8s_service(self):
         """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
@@ -229,7 +246,7 @@ class KarmaCharm(CharmBase):
 
         with self.container.is_ready() as c:
             # Check if service exists, to avoid ModelError from being raised when the service does
-            # not exist,
+            # not yet exist
             if not c.get_services().get(self._service_name):
                 logger.error("Cannot (re)start service: service does not (yet) exist.")
                 return False
