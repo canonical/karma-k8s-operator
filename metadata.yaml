@@ -20,7 +20,6 @@ containers:
 storage:
   config:
     type: filesystem
-    location: /srv
 
 resources:
   karma-image:
@@ -31,8 +30,6 @@ resources:
 requires:
   ingress:
     interface: ingress
-
-provides:
   dashboard:
     # Requirer's unit data bag should have the following keys:
     #  - name (e.g. "alertmanager-k8s/0")
