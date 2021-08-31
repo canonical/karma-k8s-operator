@@ -13,6 +13,10 @@ import urllib.request
 logger = logging.getLogger(__name__)
 
 
+class KarmaBadResponse(RuntimeError):
+    """A catch-all exception type to indicate 'no reply', regardless the reason."""
+
+
 class Karma:
     """Karma HTTP API client.
 
@@ -37,23 +41,34 @@ class Karma:
         self.timeout = timeout
 
     @staticmethod
-    def _get(url: str, timeout) -> str:
-        """Send a GET request with a timeout."""
+    def _get(url: str, timeout: float) -> str:
+        """Send a GET request with a timeout.
+
+        Args:
+            url: target url to GET from
+            timeout: duration in seconds after which to return, regardless the result
+
+        Raises:
+            AlertmanagerBadResponse: If no response or invalid response, regardless the reason.
+        """
         try:
             response = urllib.request.urlopen(url, data=None, timeout=timeout)
             if response.code == 200:
-                text = response.read()
-            else:
-                text = None
-        except (ValueError, urllib.error.HTTPError, urllib.error.URLError):
-            text = None
-        return text
+                return response.read()
+            raise KarmaBadResponse(
+                f"Bad response (code={response.code}, reason={response.reason})"
+            )
+        except (ValueError, urllib.error.HTTPError, urllib.error.URLError) as e:
+            raise KarmaBadResponse("Bad response") from e
 
     @property
     def healthy(self) -> bool:
         """Check that the Karma web port is listening."""
         url = urllib.parse.urljoin(self.base_url, "/health")
-        return bool(self._get(url, timeout=self.timeout))
+        try:
+            return bool(self._get(url, timeout=self.timeout))
+        except KarmaBadResponse:
+            return False
 
     @property
     def version(self) -> str:
@@ -67,12 +82,11 @@ class Karma:
         """
         url = urllib.parse.urljoin(self.base_url, "/version")
 
-        if version_info := self._get(url, timeout=self.timeout):
-            logger.debug("version_info: %s", version_info)
+        try:
+            version_info = self._get(url, timeout=self.timeout)
             version_info = json.loads(version_info)
             karma_version = version_info["version"]
             karma_version_number = karma_version[1:]  # to drop the leading "v"
-        else:
-            karma_version_number = "0.0.0"
-
-        return karma_version_number
+            return karma_version_number
+        except KeyError as e:
+            raise KarmaBadResponse("Unexpected response") from e

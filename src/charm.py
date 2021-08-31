@@ -17,7 +17,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.pebble import Layer
 
-from karma_client import Karma
+from karma_client import Karma, KarmaBadResponse
 from kubernetes_service import K8sServicePatch, PatchFailed
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,13 @@ class KarmaCharm(CharmBase):
         super().__init__(*args)
         self._stored.set_default(servers={}, config_hash=None)
         self.api = Karma(port=self.port)
-        self.provider = KarmaProvider(self, "dashboard", self._service_name, self.api.version)
+
+        try:
+            workload_version = self.api.version
+        except KarmaBadResponse:
+            workload_version = "0.0.0"
+
+        self.provider = KarmaProvider(self, "dashboard", self._service_name, workload_version)
         self.container = self.unit.get_container(self._container_name)
 
         # Core lifecycle events
@@ -55,6 +61,7 @@ class KarmaCharm(CharmBase):
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(self.on.karma_pebble_ready, self._on_pebble_ready)
         self.framework.observe(self.on.start, self._on_start)
+        self.framework.observe(self.on.update_status, self._on_update_status)
 
         # Custom events
         self.framework.observe(
@@ -260,6 +267,21 @@ class KarmaCharm(CharmBase):
             return False
 
         return True
+
+    def _on_update_status(self, _):
+        """Event handler for UpdateStatusEvent.
+
+        Logs list of peers, uptime and version info.
+        """
+        try:
+            version = self.api.version
+            logger.info("karma %s is up and running", version)
+        except KarmaBadResponse as e:
+            logger.error("Failed to obtain status update (is karma running?): %s", str(e))
+
+        # Calling the common hook to make sure a single unit set its IP in case all events fired
+        # before an IP address was ready, leaving UpdateStatue as the last resort.
+        self._common_exit_hook()
 
 
 if __name__ == "__main__":

@@ -336,7 +336,6 @@ class KarmaConsumer(ConsumerBase):
             return
 
         self._stored.config.update(config)
-        logger.debug("stored karma config: %s", self._stored.config)
 
         # target changed - must update all relation data
         self._update_relation_data()
