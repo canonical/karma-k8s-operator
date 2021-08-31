@@ -6,7 +6,6 @@
 
 import hashlib
 import logging
-from typing import Optional
 
 import yaml
 from charms.karma_k8s.v0.karma import KarmaProvider
@@ -272,10 +271,6 @@ class KarmaCharm(CharmBase):
             logger.info("karma %s is up and running", version)
         except KarmaBadResponse as e:
             logger.error("Failed to obtain status update (is karma running?): %s", str(e))
-
-        # Calling the common hook to make sure a single unit set its IP in case all events fired
-        # before an IP address was ready, leaving UpdateStatue as the last resort.
-        self._common_exit_hook()
 
 
 if __name__ == "__main__":

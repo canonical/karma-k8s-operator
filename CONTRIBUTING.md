@@ -51,6 +51,13 @@ tox -e static    # static analysis
 tox -e unit      # unit tests
 ```
 
+tox creates virtual environment for every tox environment defined in
+[tox.ini](tox.ini). To activate a tox environment for manual testing,
+
+```shell
+source .tox/unit/bin/activate
+```
+
 ## Build charm
 
 Build the charm in this git repository using
@@ -83,7 +90,7 @@ juju deploy ./karma-k8s.charm \
 
 ## Design choices
 - The charm attempts to start the karma server only if there is an active
-  `alerting` relation. This is needed because if karam cannot communicate with
+  `alerting` relation. This is needed because if karma cannot communicate with
   an alertmanager server, it will exit immediately, which would cause pebble to
   report a failure and keep retrying.
 
