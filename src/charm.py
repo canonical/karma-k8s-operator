@@ -159,8 +159,7 @@ class KarmaCharm(CharmBase):
         # It is recommended to default to `self.app.name` so that the external
         # hostname will correspond to the deployed application name in the
         # model, but allow it to be set to something specific via config.
-
-        return self.config["external_hostname"] or f"{self.app.name}.juju"
+        return self.config.get("external_hostname", self.app.name)
 
     @property
     def port(self):

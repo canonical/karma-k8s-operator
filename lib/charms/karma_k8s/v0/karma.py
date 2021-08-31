@@ -31,10 +31,8 @@ logger = logging.getLogger(__name__)
 class KarmaAlertmanagerConfig:
     """A helper class for alertmanager server configuration for Karma.
 
-    Refer to the `Karma documentation`_ for full details.
-
-    .. _Karma documentation:
-        https://github.com/prymitive/karma/blob/main/docs/CONFIGURATION.md#alertmanagers
+    Refer to the Karma documentation for full details:
+    https://github.com/prymitive/karma/blob/main/docs/CONFIGURATION.md#alertmanagers
     """
 
     required_fields = {"name", "uri"}
