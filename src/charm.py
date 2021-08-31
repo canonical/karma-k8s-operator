@@ -23,13 +23,6 @@ from kubernetes_service import K8sServicePatch, PatchFailed
 logger = logging.getLogger(__name__)
 
 
-def sha256(hashable) -> str:
-    """Use instead of the builtin hash() for repeatable values."""
-    if isinstance(hashable, str):
-        hashable = hashable.encode("utf-8")
-    return hashlib.sha256(hashable).hexdigest()
-
-
 class KarmaCharm(CharmBase):
     """A Juju charm for Karma."""
 
@@ -78,31 +71,16 @@ class KarmaCharm(CharmBase):
             },
         )
 
-    @property
-    def private_address(self) -> Optional[str]:
-        """Get the unit's ip address.
-
-        Returns:
-          None if no IP is available (called before unit "joined"); unit's ip address otherwise
-        """
-        peer_relation = self.model.get_relation(self._peer_relation_name)
-        if bind_address := self.model.get_binding(peer_relation).network.bind_address:
-            bind_address = str(bind_address)
-        return bind_address
-
     def _common_exit_hook(self) -> bool:
         """Event processing hook that is common to all events to ensure idempotency."""
         if not self.container.is_ready():
             self.unit.status = MaintenanceStatus("Waiting for pod startup to complete")
             return False
 
-        # Wait for IP address. IP address is needed for config hot-reload and status updates.
-        if not self.private_address:
-            self.unit.status = MaintenanceStatus("Waiting for IP address")
-            return False
-
         if not self.provider.config_valid:
-            self.unit.status = BlockedStatus("Waiting for a dashboard relation")
+            self.unit.status = BlockedStatus(
+                "Waiting for a dashboard relation (e.g. alertmanager)"
+            )
             return False
 
         # Update pebble layer
@@ -139,7 +117,7 @@ class KarmaCharm(CharmBase):
         alertmanagers = self.provider.get_alertmanager_servers()
         config = {"alertmanager": {"servers": alertmanagers}, "listen": {"port": self.port}}
         config_yaml = yaml.safe_dump(config)
-        config_hash = sha256(config_yaml)
+        config_hash = hashlib.sha256(config_yaml).hexdigest()
 
         config_changed = False
         if config_hash != self._stored.config_hash:
