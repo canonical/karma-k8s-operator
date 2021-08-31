@@ -9,11 +9,6 @@ alertmanager-operator or karma-alertmanager-proxy-operator.
   implementation, you can reach us at
   [Canonical Mattermost public channel](https://chat.charmhub.io/charmhub/channels/charm-dev)
   or [Discourse](https://discourse.charmhub.io/).
-- It is strongly recommended that prior to engaging in any enhancements
-  to this charm you familiarise your self with Juju.
-- Familiarising yourself with the
-  [Charmed Operator Framework](https://juju.is/docs/sdk).
-  library will help you a lot when working on PRs.
 - All enhancements require review before being merged. Besides the
   code quality and test coverage, the review will also take into
   account the resulting user experience for Juju administrators using
@@ -71,15 +66,26 @@ charmcraft pack
 ### Deploy Karma
 
 ```shell
-    juju deploy ./karma-k8s.charm \
-      --resource karma-image=ghcr.io/prymitive/karma:v0.87
+juju deploy ./karma-k8s.charm \
+  --resource karma-image=ghcr.io/prymitive/karma:v0.90
 ```
 
 ## Code overview
-TODO
+- The main charm class is `KarmaCharm`, which responds to config changes
+  (via `ConfigChangedEvent`) and application upgrades (via
+  `UpgradeCharmEvent`).
+- All lifecycle events call a common hook, `_common_exit_hook` after executing
+  their own business logic. This pattern simplifies state tracking and improves
+  consistency.
+- On startup, the charm waits for `PebbleReadyEvent` and for an IP address to
+  become available before starting the alertmanager service and declaring
+  `ActiveStatus`.
 
 ## Design choices
-TODO
+- The charm attempts to start the karma server only if there is an active
+  `alerting` relation. This is needed because if karam cannot communicate with
+  an alertmanager server, it will exit immediately, which would cause pebble to
+  report a failure and keep retrying.
 
 ## Roadmap
 * Tests:
