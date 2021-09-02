@@ -51,7 +51,7 @@ class KarmaCharm(CharmBase):
         except KarmaBadResponse:
             workload_version = "0.0.0"
 
-        self.karma_lib = KarmaConsumer(
+        self.karma_consumer = KarmaConsumer(
             self, "dashboard", consumes={self._service_name: workload_version}
         )
         self.container = self.unit.get_container(self._container_name)
@@ -66,7 +66,8 @@ class KarmaCharm(CharmBase):
 
         # Custom events
         self.framework.observe(
-            self.karma_lib.on.alertmanager_config_changed, self._on_alertmanager_config_changed
+            self.karma_consumer.on.alertmanager_config_changed,
+            self._on_alertmanager_config_changed,
         )
 
         self.service_hostname = self._external_hostname
@@ -85,7 +86,7 @@ class KarmaCharm(CharmBase):
             self.unit.status = MaintenanceStatus("Waiting for pod startup to complete")
             return
 
-        if not self.karma_lib.config_valid:
+        if not self.karma_consumer.config_valid:
             self.unit.status = BlockedStatus(
                 f"Waiting for 'juju relate {self.app.name} ...' to form a dashboard relation"
             )
@@ -108,7 +109,7 @@ class KarmaCharm(CharmBase):
             self.unit.status = BlockedStatus("Alertmanager container not ready")
             return
 
-        # self.karma_lib.ready()
+        # self.karma_consumer.ready()
         self.unit.status = ActiveStatus()
 
     def _update_config(self) -> bool:
@@ -120,7 +121,7 @@ class KarmaCharm(CharmBase):
         Returns:
           True if config changed; False otherwise
         """
-        alertmanagers = self.karma_lib.get_alertmanager_servers()
+        alertmanagers = self.karma_consumer.get_alertmanager_servers()
         config = {"alertmanager": {"servers": alertmanagers}, "listen": {"port": self.port}}
         config_yaml = yaml.safe_dump(config)
         config_hash = sha256(config_yaml)
