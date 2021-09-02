@@ -1,18 +1,15 @@
-# Copyright 2021 Xav Paice
+# Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
-#
-# Learn more about testing at: https://juju.is/docs/sdk/testing
 
 import shutil
 import tempfile
 import unittest
-from unittest.mock import Mock
 
-import requests
-from charm import AlertmanagerKarmaCharm
 from charms.karma_k8s.v0.karma import KarmaAlertmanagerConfig
 from ops.model import ActiveStatus
 from ops.testing import Harness
+
+from charm import KarmaCharm
 
 
 class TestKarmaAlertmanagerConfig(unittest.TestCase):
@@ -29,7 +26,7 @@ class TestKarmaAlertmanagerConfig(unittest.TestCase):
 
 class TestCharm(unittest.TestCase):
     def setUp(self):
-        self.harness = Harness(AlertmanagerKarmaCharm)
+        self.harness = Harness(KarmaCharm)
         self.addCleanup(self.harness.cleanup)
         self.harness.begin()
         self.test_dir = tempfile.mkdtemp()
@@ -45,17 +42,7 @@ class TestCharm(unittest.TestCase):
         self.assertTrue(service.is_running())
         self.assertEqual(self.harness.model.unit.status, ActiveStatus())
 
-    @unittest.mock.patch.object(requests.Session, "get")
-    def test_check_karma_service_alive(self, mock_requests):
-        mockresponse = Mock()
-        mockresponse.text = "Pong\n"
-        mockresponse.status_code = 200
-        mock_requests.return_value = mockresponse
-        alive = self.harness.charm._check_karma_service_alive()
-        self.assertTrue(alive)
-
     @unittest.skip("out of date")  # FIXME
-    @unittest.mock.patch.object(AlertmanagerKarmaCharm, "_check_karma_service_alive")
     def test_karma_pebble_ready(self, mock_check_karma):
         mock_check_karma.return_value = True
         # Check the initial Pebble plan is empty
