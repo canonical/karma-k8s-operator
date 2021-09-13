@@ -46,14 +46,7 @@ class KarmaCharm(CharmBase):
         self._stored.set_default(servers={}, config_hash=None)
         self.api = Karma(port=self.port)
 
-        try:
-            workload_version = self.api.version
-        except KarmaBadResponse:
-            workload_version = "0.0.0"
-
-        self.karma_consumer = KarmaConsumer(
-            self, "dashboard", consumes={self._service_name: workload_version}
-        )
+        self.karma_consumer = KarmaConsumer(self, "dashboard")
         self.container = self.unit.get_container(self._container_name)
 
         # Core lifecycle events
@@ -82,7 +75,7 @@ class KarmaCharm(CharmBase):
 
     def _common_exit_hook(self) -> None:
         """Event processing hook that is common to all events to ensure idempotency."""
-        if not self.container.is_ready():
+        if not self.container.can_connect():
             self.unit.status = MaintenanceStatus("Waiting for pod startup to complete")
             return
 
@@ -93,23 +86,16 @@ class KarmaCharm(CharmBase):
             return
 
         # Update pebble layer
-        with self.container.is_ready() as c:
-            config_changed = self._update_config()
-            layer_changed = self._update_layer(restart=False)
-            service_running = (
-                service := self.container.get_service(self._service_name)
-            ) and service.is_running()
-            if layer_changed or config_changed or not service_running:
-                if not self._restart_service():
-                    self.unit.status = BlockedStatus("Service restart failed")
-                    return
+        config_changed = self._update_config()
+        layer_changed = self._update_layer(restart=False)
+        service_running = (
+            service := self.container.get_service(self._service_name)
+        ) and service.is_running()
+        if layer_changed or config_changed or not service_running:
+            if not self._restart_service():
+                self.unit.status = BlockedStatus("Service restart failed")
+                return
 
-        if not c.completed:
-            logger.error("Alertmanager container not ready")
-            self.unit.status = BlockedStatus("Alertmanager container not ready")
-            return
-
-        # self.karma_consumer.ready()
         self.unit.status = ActiveStatus()
 
     def _update_config(self) -> bool:
@@ -196,12 +182,11 @@ class KarmaCharm(CharmBase):
         self._patch_k8s_service()
 
         # update config hash
-        with self.container.is_ready() as c:
-            self._stored.config_hash = sha256(
-                yaml.safe_dump(yaml.safe_load(self.container.pull(self.config_file)))
-            )
-        if not c.completed:
-            self._stored.config_hash = ""
+        self._stored.config_hash = (
+            ""
+            if not self.container.can_connect()
+            else sha256(yaml.safe_dump(yaml.safe_load(self.container.pull(self.config_file))))
+        )
 
         # After upgrade (refresh), the unit ip address is not guaranteed to remain the same, and
         # the config may need update. Calling the common hook to update.
@@ -245,21 +230,20 @@ class KarmaCharm(CharmBase):
         """Helper function for restarting the underlying service."""
         logger.info("Restarting service %s", self._service_name)
 
-        with self.container.is_ready() as c:
-            # Check if service exists, to avoid ModelError from being raised when the service does
-            # not yet exist
-            if not c.get_services().get(self._service_name):
-                logger.error("Cannot (re)start service: service does not (yet) exist.")
-                return False
-
-            self.container.restart(self._service_name)
-
-            if not self.api.healthy:
-                logger.error("Service restarted but karma server does not respond")
-                return False
-
-        if not c.completed:
+        if not self.container.can_connect():
             logger.error("Cannot (re)start service: container is not ready.")
+            return False
+
+        # Check if service exists, to avoid ModelError from being raised when the service does
+        # not yet exist
+        if not self.container.get_services().get(self._service_name):
+            logger.error("Cannot (re)start service: service does not (yet) exist.")
+            return False
+
+        self.container.restart(self._service_name)
+
+        if not self.api.healthy:
+            logger.error("Service restarted but karma server does not respond")
             return False
 
         return True
