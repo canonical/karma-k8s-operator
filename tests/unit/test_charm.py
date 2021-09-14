@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import unittest
 
-from charms.karma_k8s.v0.karma import KarmaAlertmanagerConfig
+from charms.karma_k8s.v0.karma_dashboard import KarmaAlertmanagerConfig
 from ops.model import ActiveStatus
 from ops.testing import Harness
 
