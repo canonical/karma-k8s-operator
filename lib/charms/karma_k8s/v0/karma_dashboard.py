@@ -151,7 +151,7 @@ class KarmaConsumer(RelationManagerBase):
     A typical example of importing this library might be
 
     ```python
-    from charms.alertmanager_karma.v0.karma import KarmaConsumer
+    from charms.alertmanager_karma.v0.karma_dashboard import KarmaConsumer
     ```
 
     In your charm's `__init__` method:
@@ -262,7 +262,7 @@ class KarmaProvider(RelationManagerBase):
     A typical example of importing this library might be
 
     ```python
-    from charms.karma_k8s.v0.karma import KarmaProvider
+    from charms.karma_k8s.v0.karma_dashboard import KarmaProvider
     ```
 
     In your charm's `__init__` method:
