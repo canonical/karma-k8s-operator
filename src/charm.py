@@ -8,7 +8,7 @@ import hashlib
 import logging
 
 import yaml
-from charms.karma_k8s.v0.karma import KarmaConsumer
+from charms.karma_k8s.v0.karma_dashboard import KarmaConsumer
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
 from ops.charm import CharmBase
 from ops.framework import StoredState
