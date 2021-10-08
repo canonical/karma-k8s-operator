@@ -24,8 +24,8 @@ storage:
 resources:
   karma-image:
     type: oci-image
-    # The officially supported image is ghcr.io/prymitive/karma
     description: OCI image for karma
+    upstream-source: ghcr.io/prymitive/karma
 
 requires:
   ingress:
