@@ -2,7 +2,6 @@
 # See LICENSE file for licensing details.
 
 name: karma-k8s
-display-name: Karma
 description: |
   Alertmanager UI is useful for browsing alerts and managing silences, but it's
   lacking as a dashboard tool - karma aims to fill this gap.  This charm deploys
@@ -24,8 +23,8 @@ storage:
 resources:
   karma-image:
     type: oci-image
-    # The officially supported image is ghcr.io/prymitive/karma
     description: OCI image for karma
+    upstream-source: ghcr.io/prymitive/karma
 
 requires:
   ingress:
