@@ -14,7 +14,7 @@ from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
-from ops.pebble import Layer
+from ops.pebble import Layer, PathError
 
 from karma_client import Karma, KarmaBadResponse
 from kubernetes_service import K8sServicePatch, PatchFailed
@@ -182,11 +182,15 @@ class KarmaCharm(CharmBase):
         self._patch_k8s_service()
 
         # update config hash
-        self._stored.config_hash = (
-            ""
-            if not self.container.can_connect()
-            else sha256(yaml.safe_dump(yaml.safe_load(self.container.pull(self.config_file))))
-        )
+        if not self.container.can_connect():
+            self._stored.config_hash = ""
+        else:
+            try:
+                config = self.container.pull(self.config_file)
+            except PathError:
+                self._stored.config_hash = ""
+            else:
+                self._stored.config_hash = sha256(yaml.safe_dump(yaml.safe_load(config)))
 
         # After upgrade (refresh), the unit ip address is not guaranteed to remain the same, and
         # the config may need update. Calling the common hook to update.
