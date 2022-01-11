@@ -26,7 +26,7 @@ async def test_deploy_from_local_path(ops_test, charm_under_test):
     await ops_test.model.deploy(charm_under_test, application_name=app_name, resources=resources)
 
     await ops_test.model.applications[app_name].set_config(config)
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(apps=[app_name], status="blocked", timeout=1000)
 
 
 @pytest.mark.abort_on_fail
@@ -48,6 +48,6 @@ async def test_config_values_are_retained_after_pod_deleted_and_restarted(ops_te
     assert retcode == 0, f"kubectl failed: {(stderr or stdout).strip()}"
     logger.debug(stdout)
     await ops_test.model.block_until(lambda: len(ops_test.model.applications[app_name].units) > 0)
-    await ops_test.model.wait_for_idle(apps=[app_name], status="active", timeout=1000)
+    await ops_test.model.wait_for_idle(apps=[app_name], status="blocked", timeout=1000)
 
     assert (await get_config_values(ops_test, app_name)).items() >= config.items()

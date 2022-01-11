@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import IPAddressWorkaround, get_unit_address  # type: ignore[import]
+from helpers import IPAddressWorkaround  # type: ignore[import]
 
 log = logging.getLogger(__name__)
 
@@ -24,18 +24,6 @@ async def test_build_and_deploy(ops_test, charm_under_test):
     # the charm should go into blocked status until related to alertmanager
     await ops_test.model.wait_for_idle(apps=["karma"], status="blocked")
     assert ops_test.model.applications["karma"].units[0].workload_status == "blocked"
-
-
-@pytest.mark.abort_on_fail
-async def test_charm_goes_into_active_state_after_alertmanager_ip_provided(ops_test):
-
-    # configure the proxy charm (the charm-under-test) with alertmanager's IP address
-    url = f"http://{await get_unit_address(ops_test, 'am', 0)}:9093"
-    await ops_test.model.applications["proxy"].set_config({"url": url})
-
-    # after IP address is configured, the charm should be in "active" status
-    await ops_test.model.wait_for_idle(apps=["proxy"], status="active", timeout=60)
-    assert ops_test.model.applications["proxy"].units[0].workload_status == "active"
 
 
 @pytest.mark.abort_on_fail
