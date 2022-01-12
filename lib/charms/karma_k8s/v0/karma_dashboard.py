@@ -133,6 +133,7 @@ class RelationManagerBase(Object):
 
     def __init__(self, charm: CharmBase, relation_name, relation_role: RelationRole):
         super().__init__(charm, relation_name)
+        self.charm = charm
         self._validate_relation(relation_name, relation_role)
         self.name = relation_name
 
@@ -140,18 +141,26 @@ class RelationManagerBase(Object):
         try:
             if self.charm.meta.relations[relation_name].role != relation_role:
                 raise ValueError(
-                    f"Relation '{relation_name}' in the charm's metadata.yaml must be "
-                    f"'{relation_role}' to be managed by this library, but instead it is "
-                    f"'{self.charm.meta.relations[relation_name].role}'"
+                    "Relation '{}' in the charm's metadata.yaml must be '{}' "
+                    "to be managed by this library, but instead it is '{}'".format(
+                        relation_name,
+                        relation_role,
+                        self.charm.meta.relations[relation_name].role,
+                    )
                 )
             if self.charm.meta.relations[relation_name].interface_name != INTERFACE_NAME:
                 raise ValueError(
-                    f"Relation '{relation_name}' in the charm's metadata.yaml must use the "
-                    f"'{INTERFACE_NAME}' interface to be managed by this library, but "
-                    f"instead it is '{self.charm.meta.relations[relation_name].interface_name}'"
+                    "Relation '{}' in the charm's metadata.yaml must use the '{}' interface "
+                    "to be managed by this library, but instead it is '{}'".format(
+                        relation_name,
+                        INTERFACE_NAME,
+                        self.charm.meta.relations[relation_name].interface_name,
+                    )
                 )
         except KeyError:
-            raise ValueError(f"Relation '{relation_name}' is not in the charm's metadata.yaml")
+            raise ValueError(
+                "Relation '{}' is not in the charm's metadata.yaml".format(relation_name)
+            )
 
 
 class KarmaConsumer(RelationManagerBase):
@@ -355,8 +364,9 @@ class KarmaProvider(RelationManagerBase):
             None.
         """
         name = self.charm.unit.name
-        cluster = f"{self.charm.model.name}_{self.charm.app.name}"
-        if not (config := KarmaAlertmanagerConfig.build(name, url, cluster=cluster)):
+        cluster = "{}_{}".format(self.charm.model.name, self.charm.app.name)
+        config = KarmaAlertmanagerConfig.build(name, url, cluster=cluster)
+        if not config:
             logger.warning("Invalid config: {%s, %s}", name, url)
             return
 

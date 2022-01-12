@@ -1,5 +1,11 @@
 name: Run-Tests
-on: [pull_request, push]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   static-analysis:
@@ -32,3 +38,15 @@ jobs:
       run: python -m pip install tox
     - name: Run tests
       run: tox -vve unit
+  integration-test-microk8s:
+    name: Integration tests (microk8s)
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Setup operator environment
+      uses: charmed-kubernetes/actions-operator@main
+      with:
+        provider: microk8s
+    - name: Run tests
+      run: tox -vve integration
