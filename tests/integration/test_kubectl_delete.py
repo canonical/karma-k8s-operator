@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import get_config_values  # type: ignore[import]
+from helpers import get_config_values
 
 logger = logging.getLogger(__name__)
 
