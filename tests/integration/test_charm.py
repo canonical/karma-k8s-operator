@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 import yaml
-from helpers import IPAddressWorkaround  # type: ignore[import]
+from helpers import IPAddressWorkaround
 
 log = logging.getLogger(__name__)
 
