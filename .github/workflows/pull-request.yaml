@@ -1,10 +1,17 @@
-name: Pull Request
+name: Pull Requests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 on:
-  workflow_call:
+  pull_request:
     secrets:
       CHARMHUB_TOKEN:
         required: false
+    branches:
+      - main
+
 jobs:
   check-secret:
     runs-on: ubuntu-latest
@@ -53,4 +60,3 @@ jobs:
       - linting
       - unit-test
     uses: canonical/observability/.github/workflows/_integration-tests.yaml@main
-
