@@ -391,7 +391,7 @@ class KarmaProvider(RelationManagerBase):
             # a single consumer charm's unit may be related to multiple karma dashboards
             if self.name in self.charm.model.relations:
                 for relation in self.charm.model.relations[self.name]:
-                    relation.data[self.charm.unit].update(self._stored.config)
+                    relation.data[self.charm.unit].update(self._stored.config) #type: ignore
         else:
             # update relation data only for the newly joined relation
-            event.relation.data[self.charm.unit].update(self._stored.config)
+            event.relation.data[self.charm.unit].update(self._stored.config) #type: ignore
