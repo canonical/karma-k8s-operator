@@ -38,10 +38,10 @@ copyright-regexp = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+%(author)s"
 [tool.mypy]
 pretty = true
 python_version = 3.8
-mypy_path = "$MYPY_CONFIG_FILE_DIR/src:$MYPY_CONFIG_FILE_DIR/lib:$MYPY_CONFIG_FILE_DIR/tests/unit"
+mypy_path = "./src:./lib:./tests/unit"
 follow_imports = "normal"
 warn_redundant_casts = true
-warn_unused_ignores = true
+warn_unused_ignores = false
 warn_unused_configs = true
 show_traceback = true
 show_error_codes = true
@@ -54,6 +54,11 @@ allow_redefinition = true
 [[tool.mypy.overrides]]
 module = ["ops.*", "kubernetes.*", "pytest_operator.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["charms.nginx_ingress_integrator.*"]
+follow_imports = "silent"
+warn_unused_ignores = false
 
 [tool.pytest.ini_options]
 minversion = "6.0"
