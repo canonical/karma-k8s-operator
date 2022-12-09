@@ -344,12 +344,12 @@ class KarmaProvider(RelationManagerBase):
             True if the currently stored configuration for an alertmanager target is valid; False
             otherwise.
         """
-        return KarmaAlertmanagerConfig.is_valid(self._stored.config) #type: ignore
+        return KarmaAlertmanagerConfig.is_valid(self._stored.config)  # type: ignore
 
     @property
     def target(self) -> Optional[str]:
         """str: Alertmanager URL to be used by Karma."""
-        return self._stored.config.get("uri", None) #type: ignore
+        return self._stored.config.get("uri", None)  # type: ignore
 
     @target.setter
     def target(self, url: str) -> None:
@@ -370,7 +370,7 @@ class KarmaProvider(RelationManagerBase):
             logger.warning("Invalid config: {%s, %s}", name, url)
             return
 
-        self._stored.config.update(config) #type: ignore
+        self._stored.config.update(config)  # type: ignore
 
         # target changed - must update all relation data
         self._update_relation_data()
@@ -391,7 +391,7 @@ class KarmaProvider(RelationManagerBase):
             # a single consumer charm's unit may be related to multiple karma dashboards
             if self.name in self.charm.model.relations:
                 for relation in self.charm.model.relations[self.name]:
-                    relation.data[self.charm.unit].update(self._stored.config) #type: ignore
+                    relation.data[self.charm.unit].update(self._stored.config)  # type: ignore
         else:
             # update relation data only for the newly joined relation
-            event.relation.data[self.charm.unit].update(self._stored.config) #type: ignore
+            event.relation.data[self.charm.unit].update(self._stored.config)  # type: ignore
