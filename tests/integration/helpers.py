@@ -33,6 +33,7 @@ class IPAddressWorkaround:
 
     async def __aenter__(self):
         """On entry, the update status interval is set to the minimum 10s."""
+        assert self.ops_test.model is not None
         config = await self.ops_test.model.get_config()
         self.revert_to = config["update-status-hook-interval"]
         await self.ops_test.model.set_config({"update-status-hook-interval": "10s"})
@@ -40,4 +41,5 @@ class IPAddressWorkaround:
 
     async def __aexit__(self, exc_type, exc_value, exc_traceback):
         """On exit, the update status interval is reverted to its original value."""
+        assert self.ops_test.model is not None
         await self.ops_test.model.set_config({"update-status-hook-interval": self.revert_to})
