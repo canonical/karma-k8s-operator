@@ -37,7 +37,7 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 3
+LIBPATCH = 4
 
 # Set to match metadata.yaml
 INTERFACE_NAME = "karma_dashboard"
