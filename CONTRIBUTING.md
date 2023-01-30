@@ -74,7 +74,7 @@ charmcraft pack
 
 ```shell
 juju deploy ./karma-k8s.charm \
-  --resource karma-image=ghcr.io/prymitive/karma:v0.90
+  --resource karma-image=ghcr.io/prymitive/karma:v0.111
 ```
 
 ## Code overview
