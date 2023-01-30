@@ -74,7 +74,7 @@ Currently, supported relations are:
 
 ## OCI Images
 This charm can be used with the following image:
-- `ghcr.io/prymitive/karma:v0.90`
+- `ghcr.io/prymitive/karma:v0.111`
 
 
 [Karma source]: https://github.com/prymitive/karma
