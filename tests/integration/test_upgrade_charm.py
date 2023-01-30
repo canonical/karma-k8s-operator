@@ -21,7 +21,9 @@ async def test_config_values_are_retained_after_pod_upgraded(ops_test, charm_und
     """Deploy from charmhub and then upgrade with the charm-under-test."""
     logger.info("deploy charm from charmhub")
     resources = {"karma-image": METADATA["resources"]["karma-image"]["upstream-source"]}
-    await ops_test.model.deploy(f"ch:{app_name}", application_name=app_name, channel="edge")
+    await ops_test.model.deploy(
+        f"ch:{app_name}", application_name=app_name, channel="edge", trust=True
+    )
 
     config = {"external_hostname": "just.a.test"}
     await ops_test.model.applications[app_name].set_config(config)
