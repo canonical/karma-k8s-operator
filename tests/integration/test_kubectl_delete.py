@@ -23,7 +23,9 @@ async def test_deploy_from_local_path(ops_test, charm_under_test):
     logger.debug("deploy local charm")
 
     resources = {"karma-image": METADATA["resources"]["karma-image"]["upstream-source"]}
-    await ops_test.model.deploy(charm_under_test, application_name=app_name, resources=resources)
+    await ops_test.model.deploy(
+        charm_under_test, application_name=app_name, resources=resources, trust=True
+    )
 
     await ops_test.model.applications[app_name].set_config(config)
     await ops_test.model.wait_for_idle(apps=[app_name], status="blocked", timeout=1000)
