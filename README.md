@@ -1,5 +1,10 @@
 # Karma Operator (k8s)
 
+[![CharmHub Badge](https://charmhub.io/karma-k8s/badge.svg)](https://charmhub.io/karma-k8s)
+[![Release to Edge](https://github.com/canonical/karma-k8s-operator/actions/workflows/release-edge.yaml/badge.svg)](https://github.com/canonical/karma-k8s-operator/actions/workflows/release-edge.yaml)
+[![Release Libraries](https://github.com/canonical/karma-k8s-operator/actions/workflows/release-libs.yaml/badge.svg)](https://github.com/canonical/karma-k8s-operator/actions/workflows/release-libs.yaml)
+[![Discourse Status](https://img.shields.io/discourse/status?server=https%3A%2F%2Fdiscourse.charmhub.io&style=flat&label=CharmHub%20Discourse)](https://discourse.charmhub.io)
+
 ## Description
 
 Alertmanager UI is useful for browsing alerts and managing silences, but it's
