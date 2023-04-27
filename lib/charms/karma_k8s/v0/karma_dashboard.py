@@ -328,7 +328,7 @@ class KarmaProvider(RelationManagerBase):
         # It is needed here because the target URL may be set by the consumer before any
         # "karma-dashboard" relation is joined, in which case there are no relation unit data bags
         # available for storing the target URL.
-        self._stored.set_default(config=dict())
+        self._stored.set_default(config={})
 
         events = self.charm.on[self.name]
         self.framework.observe(events.relation_joined, self._on_relation_joined)
