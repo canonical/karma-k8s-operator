@@ -6,7 +6,6 @@ import unittest
 from unittest.mock import patch
 
 import kubernetes
-
 from kubernetes_service import K8sServicePatch, PatchFailed
 
 

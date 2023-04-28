@@ -1,11 +1,22 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+import grp
 import logging
 
 from pytest_operator.plugin import OpsTest
 
 log = logging.getLogger(__name__)
+
+
+def uk8s_group() -> str:
+    try:
+        # Classically confined microk8s
+        uk8s_group = grp.getgrnam("microk8s").gr_name
+    except KeyError:
+        # Strictly confined microk8s
+        uk8s_group = "snap_microk8s"
+    return uk8s_group
 
 
 async def get_unit_address(ops_test, app_name: str, unit_num: int) -> str:

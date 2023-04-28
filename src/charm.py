@@ -10,14 +10,13 @@ import logging
 import yaml
 from charms.karma_k8s.v0.karma_dashboard import KarmaConsumer
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
+from karma_client import Karma, KarmaBadResponse
+from kubernetes_service import K8sServicePatch, PatchFailed
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.pebble import Layer, PathError
-
-from karma_client import Karma, KarmaBadResponse
-from kubernetes_service import K8sServicePatch, PatchFailed
 
 logger = logging.getLogger(__name__)
 
