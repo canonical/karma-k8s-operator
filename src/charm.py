@@ -52,13 +52,15 @@ class KarmaCharm(CharmBase):
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
-        self.framework.observe(self.on.karma_pebble_ready, self._on_pebble_ready)
+        self.framework.observe(
+            self.on.karma_pebble_ready, self._on_pebble_ready  # pyright: ignore
+        )
         self.framework.observe(self.on.start, self._on_start)
         self.framework.observe(self.on.update_status, self._on_update_status)
 
         # Custom events
         self.framework.observe(
-            self.karma_consumer.on.alertmanager_config_changed,
+            self.karma_consumer.on.alertmanager_config_changed,  # pyright: ignore
             self._on_alertmanager_config_changed,
         )
 
@@ -111,7 +113,7 @@ class KarmaCharm(CharmBase):
         config_yaml = yaml.safe_dump(config)
         config_hash = sha256(config_yaml)
 
-        if config_hash != self._stored.config_hash:
+        if config_hash != self._stored.config_hash:  # pyright: ignore
             self.container.push(self.config_file, config_yaml)
             self._stored.config_hash = config_hash
             return True

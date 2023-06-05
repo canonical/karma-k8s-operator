@@ -1,12 +1,13 @@
-#!/usr/bin/env python3
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-"""Library for kubernetes services."""
+"""A simple class used for patching incorrect Kubernetes Service definitions created by Juju."""
 
 from typing import List, Tuple
 
-import kubernetes
+import kubernetes  # noqa: F401
+from kubernetes import client, config
+from kubernetes.client import exceptions
 
 
 class PatchFailed(RuntimeError):
@@ -40,13 +41,13 @@ class K8sServicePatch:
             PatchFailed: if no permissions to read cluster role
         """
         # Authenticate against the Kubernetes API using a mounted ServiceAccount token
-        kubernetes.config.load_incluster_config()
+        config.load_incluster_config()
         # Test the service account we've got for sufficient perms
-        api = kubernetes.client.CoreV1Api(kubernetes.client.ApiClient())
+        api = client.CoreV1Api(client.ApiClient())
 
         try:
             api.list_namespaced_service(namespace=K8sServicePatch.namespace())
-        except kubernetes.client.exceptions.ApiException as e:
+        except exceptions.ApiException as e:
             if e.status == 403:
                 raise PatchFailed(
                     "No permission to read cluster role. " "Run `juju trust` on this application."
@@ -54,9 +55,7 @@ class K8sServicePatch:
             raise e
 
     @staticmethod
-    def _k8s_service(
-        app: str, service_ports: List[Tuple[str, int, int]]
-    ) -> kubernetes.client.V1Service:
+    def _k8s_service(app: str, service_ports: List[Tuple[str, int, int]]) -> client.V1Service:
         """Property accessor to return a valid Kubernetes Service representation for Alertmanager.
 
         Args:
@@ -65,22 +64,22 @@ class K8sServicePatch:
 
         Returns:
             kubernetes.client.V1Service: A Kubernetes Service with correctly annotated metadata and
-            ports
+            ports.
         """
         ports = [
-            kubernetes.client.V1ServicePort(name=port[0], port=port[1], target_port=port[2])
+            client.V1ServicePort(name=port[0], port=port[1], target_port=port[2])
             for port in service_ports
         ]
 
         ns = K8sServicePatch.namespace()
-        return kubernetes.client.V1Service(
+        return client.V1Service(
             api_version="v1",
-            metadata=kubernetes.client.V1ObjectMeta(
+            metadata=client.V1ObjectMeta(
                 namespace=ns,
                 name=app,
                 labels={"app.kubernetes.io/name": app},
             ),
-            spec=kubernetes.client.V1ServiceSpec(
+            spec=client.V1ServiceSpec(
                 ports=ports,
                 selector={"app.kubernetes.io/name": app},
             ),
@@ -114,7 +113,7 @@ class K8sServicePatch:
 
         ns = K8sServicePatch.namespace()
         # Set up a Kubernetes client
-        api = kubernetes.client.CoreV1Api(kubernetes.client.ApiClient())
+        api = client.CoreV1Api(client.ApiClient())
         try:
             # Delete the existing service so we can redefine with correct ports
             # I don't think you can issue a patch that *replaces* the existing ports,
@@ -124,5 +123,5 @@ class K8sServicePatch:
             api.create_namespaced_service(
                 namespace=ns, body=K8sServicePatch._k8s_service(app, service_ports)
             )
-        except kubernetes.client.exceptions.ApiException as e:
-            raise PatchFailed(f"Failed to patch k8s service: {e}") from e
+        except exceptions.ApiException as e:
+            raise PatchFailed("Failed to patch k8s service: {}".format(e))
