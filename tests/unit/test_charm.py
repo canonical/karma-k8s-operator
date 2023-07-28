@@ -14,12 +14,12 @@ from ops.testing import Harness
 class TestKarmaAlertmanagerConfig(unittest.TestCase):
     def test_required_fields(self):
         built_config = KarmaAlertmanagerConfig.build("name", "1.1.1.1")
-        self.assertDictEqual({"name": "name", "uri": "1.1.1.1"}, built_config)
+        self.assertDictEqual({"name": "name", "uri": "1.1.1.1", "proxy": True}, built_config)
 
     def test_cluster_field(self):
         built_config = KarmaAlertmanagerConfig.build("name", "1.1.1.1", cluster="cluster")
         self.assertDictEqual(
-            {"name": "name", "uri": "1.1.1.1", "cluster": "cluster"}, built_config
+            {"name": "name", "uri": "1.1.1.1", "cluster": "cluster", "proxy": True}, built_config
         )
 
 
