@@ -4,3 +4,4 @@
 ops
 PyYAML
 kubernetes
+pydantic > 2

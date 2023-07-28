@@ -6,21 +6,8 @@ import tempfile
 import unittest
 
 from charm import KarmaCharm
-from charms.karma_k8s.v0.karma_dashboard import KarmaAlertmanagerConfig
 from ops.model import ActiveStatus
 from ops.testing import Harness
-
-
-class TestKarmaAlertmanagerConfig(unittest.TestCase):
-    def test_required_fields(self):
-        built_config = KarmaAlertmanagerConfig.build("name", "1.1.1.1")
-        self.assertDictEqual({"name": "name", "uri": "1.1.1.1", "proxy": True}, built_config)
-
-    def test_cluster_field(self):
-        built_config = KarmaAlertmanagerConfig.build("name", "1.1.1.1", cluster="cluster")
-        self.assertDictEqual(
-            {"name": "name", "uri": "1.1.1.1", "cluster": "cluster", "proxy": True}, built_config
-        )
 
 
 class TestCharm(unittest.TestCase):
