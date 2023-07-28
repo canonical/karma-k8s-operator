@@ -6,6 +6,8 @@
 
 import hashlib
 import logging
+import re
+from typing import Optional
 
 import yaml
 from charms.karma_k8s.v0.karma_dashboard import KarmaConsumer
@@ -56,6 +58,7 @@ class KarmaCharm(CharmBase):
             self.on.karma_pebble_ready, self._on_pebble_ready  # pyright: ignore
         )
         self.framework.observe(self.on.start, self._on_start)
+        self.framework.observe(self.on.stop, self._on_stop)
         self.framework.observe(self.on.update_status, self._on_update_status)
 
         # Custom events
@@ -109,7 +112,21 @@ class KarmaCharm(CharmBase):
           True if config changed; False otherwise
         """
         alertmanagers = self.karma_consumer.get_alertmanager_servers()
-        config = {"alertmanager": {"servers": alertmanagers}, "listen": {"port": self.port}}
+
+        config = {
+            "alertmanager": {"servers": alertmanagers},
+            "listen": {
+                "port": self.port,
+                # "cors": {"allowedOrigins": [am["uri"] for am in alertmanagers]},
+            },
+            "log": {
+                "config": True,
+                "level": "info",
+                "format": "text",
+                "requests": True,
+                "timestamp": False,
+            },
+        }
         config_yaml = yaml.safe_dump(config)
         config_hash = sha256(config_yaml)
 
@@ -212,6 +229,10 @@ class KarmaCharm(CharmBase):
 
     def _on_pebble_ready(self, _):
         """Event handler for PebbleReadyEvent."""
+        if version := self._karma_version:
+            self.unit.set_workload_version(version)
+        else:
+            logger.debug("Cannot set workload version at this time: could not get Karma version.")
         self._common_exit_hook()
 
     def _on_start(self, _):
@@ -222,6 +243,9 @@ class KarmaCharm(CharmBase):
         Adding this hook reduce the likelihood of that scenario.
         """
         self._common_exit_hook()
+
+    def _on_stop(self, _):
+        self.unit.set_workload_version("")
 
     def _on_config_changed(self, _):
         """Event handler for ConfigChangedEvent."""
@@ -263,6 +287,19 @@ class KarmaCharm(CharmBase):
             logger.info("karma %s is up and running", version)
         except KarmaBadResponse as e:
             logger.error("Failed to obtain status update (is karma running?): %s", str(e))
+
+    @property
+    def _karma_version(self) -> Optional[str]:
+        """Returns the version of Karma."""
+        if not self.container.can_connect():
+            return None
+        version_output, _ = self.container.exec(["/karma", "--version"]).wait_output()
+        # Output looks like this:
+        # v0.114
+        result = re.search(r"v(\d*(\.\d*)+)", version_output)
+        if result is None:
+            return None
+        return result.group(1)
 
 
 if __name__ == "__main__":
