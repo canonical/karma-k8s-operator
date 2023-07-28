@@ -109,7 +109,21 @@ class KarmaCharm(CharmBase):
           True if config changed; False otherwise
         """
         alertmanagers = self.karma_consumer.get_alertmanager_servers()
-        config = {"alertmanager": {"servers": alertmanagers}, "listen": {"port": self.port}}
+
+        config = {
+            "alertmanager": {"servers": alertmanagers},
+            "listen": {
+                "port": self.port,
+                # "cors": {"allowedOrigins": [am["uri"] for am in alertmanagers]},
+            },
+            "log": {
+                "config": True,
+                "level": "info",
+                "format": "text",
+                "requests": True,
+                "timestamp": False,
+            },
+        }
         config_yaml = yaml.safe_dump(config)
         config_hash = sha256(config_yaml)
 

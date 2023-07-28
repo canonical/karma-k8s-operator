@@ -53,7 +53,7 @@ class KarmaAlertmanagerConfig:
     """
 
     required_fields = {"name", "uri"}
-    optional_fields = {"cluster"}
+    optional_fields = {"cluster", "proxy"}
     _supported_fields = required_fields | optional_fields
 
     @staticmethod
@@ -93,19 +93,20 @@ class KarmaAlertmanagerConfig:
         return config if KarmaAlertmanagerConfig.is_valid(config) else {}
 
     @staticmethod
-    def build(name: str, url: str, *, cluster=None) -> Dict[str, str]:
+    def build(name: str, url: str, *, cluster=None, proxy: bool = True) -> Dict[str, str]:
         """Build alertmanager server configuration for Karma.
 
         Args:
             name: name for the alertmanager unit.
             url: url of the alertmanager api server (including scheme and port)
             cluster: name of a cluster to which the alertmanager unit belongs to (optional)
+            proxy: whether to use karma as a proxy for alertmanager requests from user browser.
 
         Returns:
             Alertmanager server configuration for Karma.
         """
         return KarmaAlertmanagerConfig.from_dict(
-            {"name": name, "uri": url, "cluster": cluster}  # pyright: ignore
+            {"name": name, "uri": url, "cluster": cluster, "proxy": proxy}  # pyright: ignore
         )
 
 
