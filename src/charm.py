@@ -11,7 +11,8 @@ from typing import Optional
 
 import yaml
 from charms.karma_k8s.v0.karma_dashboard import KarmaConsumer
-from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
+from charms.observability_libs.v0.cert_handler import CertHandler
+from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from karma_client import Karma, KarmaBadResponse
 from kubernetes_service import K8sServicePatch, PatchFailed
 from ops.charm import CharmBase
@@ -40,6 +41,10 @@ class KarmaCharm(CharmBase):
     _port = 8080  # web interface
     config_file = "/srv/karma.yaml"
 
+    KEY_PATH = "/srv/server.key"
+    CERT_PATH = "/srv/server.cert"
+    CA_CERT_PATH = "/usr/local/share/ca-certificates/karma-ca.crt"
+
     _stored = StoredState()
 
     def __init__(self, *args):
@@ -67,15 +72,54 @@ class KarmaCharm(CharmBase):
             self._on_alertmanager_config_changed,
         )
 
-        self.service_hostname = self._external_hostname
-        self.ingress = IngressRequires(
-            self,
-            {
-                "service-hostname": self.service_hostname,
-                "service-name": self.app.name,
-                "service-port": self.port,
-            },
+        self.server_cert = CertHandler(self, key="am-server-cert", peer_relation_name="replicas")
+        self.framework.observe(
+            self.server_cert.on.cert_changed,  # pyright: ignore
+            self._on_server_cert_changed,
         )
+
+        self.ingress = IngressPerAppRequirer(
+            self,
+            "ingress",
+            port=self._port,
+            scheme=lambda: "https" if self.server_cert.cert else "http",
+            redirect_https=True,
+        )
+        self.framework.observe(self.ingress.on.ready, self._handle_ingress)  # pyright: ignore
+        self.framework.observe(self.ingress.on.revoked, self._handle_ingress)  # pyright: ignore
+
+    def _handle_ingress(self, _):
+        self._common_exit_hook()
+
+    def _on_server_cert_changed(self, event=None):
+        if not self.container.can_connect():
+            event.defer()
+            return
+
+        for path in [self.KEY_PATH, self.CERT_PATH, self.CA_CERT_PATH]:
+            self.container.remove_path(path, recursive=True)
+
+        if self.server_cert.ca:
+            self.container.push(
+                self.CA_CERT_PATH,
+                self.server_cert.ca,
+                make_dirs=True,
+            )
+        if self.server_cert.cert and self.server_cert.key:
+            self.container.push(
+                self.CERT_PATH,
+                self.server_cert.cert,
+                make_dirs=True,
+            )
+            self.container.push(
+                self.KEY_PATH,
+                self.server_cert.key,
+                make_dirs=True,
+            )
+
+        # TODO: Uncomment when we have a rock with update-ca-certificates
+        # self.container.exec(["update-ca-certificates", "--fresh"]).wait()
+        self._common_exit_hook()
 
     def _common_exit_hook(self) -> None:
         """Event processing hook that is common to all events to ensure idempotency."""
@@ -113,10 +157,22 @@ class KarmaCharm(CharmBase):
         """
         alertmanagers = self.karma_consumer.get_alertmanager_servers()
 
+        # TODO: Drop this for loop when we have a rock with update-ca-certificates
+        #  Until then, we need the "ca" entry.
+        for am in alertmanagers:
+            am["tls"] = {"ca": self.CA_CERT_PATH}
+
         config = {
             "alertmanager": {"servers": alertmanagers},
             "listen": {
                 "port": self.port,
+                # The TLS section is allowed to have empty entries
+                # https://github.com/prymitive/karma/blob/main/docs/CONFIGURATION.md#listen
+                "tls": {
+                    # Render non-empty values only if we have a cert. The key is assumed to exist.
+                    "cert": self.CERT_PATH if self.server_cert.cert else "",
+                    "key": self.KEY_PATH if self.server_cert.cert else "",
+                }
                 # "cors": {"allowedOrigins": [am["uri"] for am in alertmanagers]},
             },
             "log": {
@@ -160,14 +216,6 @@ class KarmaCharm(CharmBase):
         return is_changed
 
     @property
-    def _external_hostname(self):
-        """Return the external hostname to be passed to ingress via the relation."""
-        # It is recommended to default to `self.app.name` so that the external
-        # hostname will correspond to the deployed application name in the
-        # model, but allow it to be set to something specific via config.
-        return self.config.get("external_hostname", self.app.name)
-
-    @property
     def port(self):
         """Return the default Karma port."""
         return self._port
@@ -209,6 +257,8 @@ class KarmaCharm(CharmBase):
                 self._stored.config_hash = ""
             else:
                 self._stored.config_hash = sha256(yaml.safe_dump(yaml.safe_load(config)))
+
+        self._on_server_cert_changed(None)
 
         # After upgrade (refresh), the unit ip address is not guaranteed to remain the same, and
         # the config may need update. Calling the common hook to update.
@@ -303,4 +353,4 @@ class KarmaCharm(CharmBase):
 
 
 if __name__ == "__main__":
-    main(KarmaCharm, use_juju_for_storage=True)
+    main(KarmaCharm)

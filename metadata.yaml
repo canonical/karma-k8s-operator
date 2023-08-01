@@ -13,6 +13,7 @@ containers:
   karma:
     resource: karma-image
     mounts:
+      # TODO: remove persistent storage for config after private key is moved to juju secrets.
       - storage: config
         location: /srv
 
@@ -34,6 +35,11 @@ requires:
     #  - name (e.g. "alertmanager-k8s/0")
     #  - uri (e.g. "http://1.1.1.1:9093")
     interface: karma_dashboard
+  certificates:
+    interface: tls-certificates
+    limit: 1
+    description: |
+      Certificate and key files for the karma server to use to authenticate to client.
 
 peers:
   replicas:
