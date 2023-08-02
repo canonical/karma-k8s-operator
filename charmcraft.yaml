@@ -16,5 +16,7 @@ parts:
     - PyYAML
     - kubernetes
     - pydantic
+    - cryptography
+    - jsonschema
     build-packages:
     - git

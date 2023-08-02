@@ -10,10 +10,10 @@ from karma_client import Karma
 
 class TestKarmaClient(unittest.TestCase):
     def setUp(self):
-        self.api = Karma("address", 12345)
+        self.api = Karma("http://address:12345")
 
     def test_base_url(self):
-        self.assertEqual("http://address:12345/", self.api.base_url)
+        self.assertEqual("http://address:12345", self.api.base_url)
 
     @patch("karma_client.urllib.request.urlopen")
     def test_healthy(self, urlopen_mock):

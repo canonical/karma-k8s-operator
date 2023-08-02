@@ -2,6 +2,17 @@
 # See LICENSE file for licensing details.
 
 ops
-PyYAML
 kubernetes
-pydantic > 2
+
+# Cryptography
+# Deps: tls_certificates
+cryptography
+
+# An implementation of the JSON Schema specification
+# Code: https://github.com/python-jsonschema/jsonschema
+# Docs: https://python-jsonschema.readthedocs.io/
+# Deps: tls_certificates
+jsonschema
+
+# From PYDEPS, for tox envs
+pydantic < 2

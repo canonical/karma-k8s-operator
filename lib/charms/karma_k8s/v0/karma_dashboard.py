@@ -23,12 +23,12 @@ class SomeApplication(CharmBase):
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import ops.charm
 from ops.charm import CharmBase, RelationJoinedEvent, RelationRole
 from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel
 
 # The unique Charmhub library identifier, never change it
 LIBID = "98f9dc00f7ff4b1197895886bdd92037"
@@ -38,9 +38,9 @@ LIBAPI = 0
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 6
+LIBPATCH = 7
 
-PYDEPS = ["pydantic > 2"]
+PYDEPS = ["pydantic < 2"]
 
 # Set to match metadata.yaml
 INTERFACE_NAME = "karma_dashboard"
@@ -54,10 +54,14 @@ class _KarmaDashboardProviderUnitDataV0(BaseModel):
     cluster: str = ""
     proxy: bool = True
 
-    @field_serializer("proxy")
-    def serialize_proxy(self, proxy: bool) -> str:
-        # We need this because relation data values must be strings, not <class 'bool'>
-        return "true" if proxy else "false"
+    class Config:
+        json_encoders = {
+            # We need this because relation data values must be strings, not <class 'bool'>
+            # Note: In pydantic>=2, can use `field_serializer`.
+            bool: lambda v: "true"
+            if v
+            else "false"
+        }
 
 
 class KarmaAlertmanagerConfigChanged(EventBase):
@@ -178,7 +182,7 @@ class KarmaConsumer(RelationManagerBase):
         self.framework.observe(events.relation_changed, self._on_relation_changed)
         self.framework.observe(events.relation_departed, self._on_relation_departed)
 
-    def get_alertmanager_servers(self) -> List[Dict[str, str]]:
+    def get_alertmanager_servers(self) -> List[Dict[str, Any]]:
         """Return configuration data for all related alertmanager servers.
 
         The exact spec is described in the Karma project documentation
@@ -194,8 +198,10 @@ class KarmaConsumer(RelationManagerBase):
         for relation in self.charm.model.relations[self.name]:
             # get data from related application
             for key in relation.data:
-                if key is not self.charm.unit and isinstance(
-                    key, ops.charm.model.Unit  # pyright: ignore
+                if (
+                    key is not self.charm.unit
+                    and isinstance(key, ops.charm.model.Unit)  # pyright: ignore
+                    and relation.data[key]
                 ):
                     data = _KarmaDashboardProviderUnitDataV0(**relation.data[key])
                     # Now convert relation data into config file format. Luckily it's trivial.
