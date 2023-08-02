@@ -91,11 +91,7 @@ class KarmaCharm(CharmBase):
     def _handle_ingress(self, _):
         self._common_exit_hook()
 
-    def _on_server_cert_changed(self, event=None):
-        if not self.container.can_connect():
-            event.defer()
-            return
-
+    def _update_certs(self):
         for path in [self.KEY_PATH, self.CERT_PATH, self.CA_CERT_PATH]:
             self.container.remove_path(path, recursive=True)
 
@@ -119,6 +115,8 @@ class KarmaCharm(CharmBase):
 
         # TODO: Uncomment when we have a rock with update-ca-certificates
         # self.container.exec(["update-ca-certificates", "--fresh"]).wait()
+
+    def _on_server_cert_changed(self, event=None):
         self._common_exit_hook()
 
     def _common_exit_hook(self) -> None:
@@ -132,6 +130,8 @@ class KarmaCharm(CharmBase):
                 f"Waiting for 'juju relate {self.app.name} ...' to form a dashboard relation"
             )
             return
+
+        self._update_certs()
 
         # Update pebble layer
         config_changed = self._update_config()
