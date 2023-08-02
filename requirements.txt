@@ -2,7 +2,13 @@
 # See LICENSE file for licensing details.
 
 ops
-kubernetes
+
+# Lightweight k8s module
+# Code: https://github.com/gtsystem/lightkube
+# Docs: https://lightkube.readthedocs.io/
+# Deps: observability_libs
+lightkube >= 0.11
+lightkube-models
 
 # Cryptography
 # Deps: tls_certificates

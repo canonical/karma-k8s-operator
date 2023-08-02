@@ -19,7 +19,6 @@ from charms.karma_k8s.v0.karma_dashboard import KarmaConsumer
 from charms.observability_libs.v0.cert_handler import CertHandler
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from karma_client import Karma, KarmaBadResponse
-from kubernetes_service import K8sServicePatch, PatchFailed
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
@@ -60,7 +59,6 @@ class KarmaCharm(CharmBase):
         self.container = self.unit.get_container(self._container_name)
 
         # Core lifecycle events
-        self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade_charm)
         self.framework.observe(
@@ -282,15 +280,8 @@ class KarmaCharm(CharmBase):
             }
         )
 
-    def _on_install(self, _):
-        """Event handler for the install event during which we will update the K8s service."""
-        self._patch_k8s_service()
-
     def _on_upgrade_charm(self, _):
         """Event handler for the upgrade event during which we will update the K8s service."""
-        # Ensure that older deployments of Karma run the logic to patch the K8s service
-        self._patch_k8s_service()
-
         # update config hash
         if not self.container.can_connect():
             self._stored.config_hash = ""
@@ -307,19 +298,6 @@ class KarmaCharm(CharmBase):
         # After upgrade (refresh), the unit ip address is not guaranteed to remain the same, and
         # the config may need update. Calling the common hook to update.
         self._common_exit_hook()
-
-    def _patch_k8s_service(self):
-        """Fix the Kubernetes service that was setup by Juju with correct port numbers."""
-        if self.unit.is_leader():
-            service_ports = [
-                (f"{self.app.name}", self._port, self._port),
-            ]
-            try:
-                K8sServicePatch.set_ports(self.app.name, service_ports)
-            except PatchFailed as e:
-                logger.error("Unable to patch the Kubernetes service: %s", str(e))
-            else:
-                logger.debug("Successfully patched the Kubernetes service")
 
     def _on_pebble_ready(self, _):
         """Event handler for PebbleReadyEvent."""
