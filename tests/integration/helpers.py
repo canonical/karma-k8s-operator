@@ -6,7 +6,7 @@ import logging
 
 from pytest_operator.plugin import OpsTest
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def uk8s_group() -> str:
@@ -30,27 +30,16 @@ async def get_config_values(ops_test, app_name) -> dict:
     return {key: config[key]["value"] for key in config if "value" in config[key]}
 
 
-class IPAddressWorkaround:
-    """Context manager for deploying a charm that needs to have its IP address.
+async def deploy_literal_bundle(ops_test: OpsTest, bundle: str):
+    run_args = [
+        "juju",
+        "deploy",
+        "--trust",
+        "-m",
+        ops_test.model_name,
+        str(ops_test.render_bundle(bundle)),
+    ]
 
-    Due to a juju bug, occasionally some charms finish a startup sequence without
-    having an ip address returned by `bind_address`.
-    https://bugs.launchpad.net/juju/+bug/1929364
-    Issuing dummy update_status just to trigger an event, and then restore it.
-    """
-
-    def __init__(self, ops_test: OpsTest):
-        self.ops_test = ops_test
-
-    async def __aenter__(self):
-        """On entry, the update status interval is set to the minimum 10s."""
-        assert self.ops_test.model is not None
-        config = await self.ops_test.model.get_config()
-        self.revert_to = config["update-status-hook-interval"]
-        await self.ops_test.model.set_config({"update-status-hook-interval": "10s"})
-        return self
-
-    async def __aexit__(self, exc_type, exc_value, exc_traceback):
-        """On exit, the update status interval is reverted to its original value."""
-        assert self.ops_test.model is not None
-        await self.ops_test.model.set_config({"update-status-hook-interval": self.revert_to})
+    retcode, stdout, stderr = await ops_test.run(*run_args)
+    assert retcode == 0, f"Deploy failed: {(stderr or stdout).strip()}"
+    logger.info(stdout)

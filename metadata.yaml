@@ -40,6 +40,8 @@ requires:
     limit: 1
     description: |
       Certificate and key files for the karma server to use to authenticate to client.
+  catalogue:
+    interface: catalogue
 
 peers:
   replicas:
