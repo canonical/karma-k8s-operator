@@ -14,6 +14,7 @@ from time import sleep
 from typing import Optional
 
 import yaml
+from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
 from charms.karma_k8s.v0.karma_dashboard import KarmaConsumer
 from charms.observability_libs.v0.cert_handler import CertHandler
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
@@ -93,9 +94,38 @@ class KarmaCharm(CharmBase):
         self.framework.observe(self.ingress.on.revoked, self._handle_ingress)  # pyright: ignore
 
         # Assuming FQDN is always part of the SANs DNS.
-        self.api = Karma(
-            f"{'https' if self.server_cert.cert else 'http'}://{socket.getfqdn()}:{self._port}"
+        self.api = Karma(self._internal_url)
+
+        self.catalog = CatalogueConsumer(
+            charm=self,
+            refresh_event=[
+                self.ingress.on.ready,  # pyright: ignore
+                self.ingress.on.revoked,  # pyright: ignore
+                self.on["ingress"].relation_changed,
+                self.on.update_status,
+                self.on.config_changed,  # also covers upgrade-charm
+            ],
+            item=CatalogueItem(
+                name="Karma",
+                icon="bell-alert",
+                url=self._external_url,
+                description=(
+                    "Karma is a dashboard-like frontend to alertmanager alerts, with handy "
+                    "filtering, grouping and silencing capabilities."
+                ),
+            ),
         )
+
+    @property
+    def _internal_url(self) -> str:
+        """Return the fqdn dns-based in-cluster (private) address of the karma api server."""
+        scheme = "https" if self.server_cert.cert else "http"
+        return f"{scheme}://{socket.getfqdn()}:{self._port}"
+
+    @property
+    def _external_url(self) -> str:
+        """Return the externally-reachable (public) address of the karma api server."""
+        return self.ingress.url or self._internal_url
 
     def _handle_ingress(self, _):
         self._common_exit_hook()
