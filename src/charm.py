@@ -7,6 +7,9 @@
 import hashlib
 import logging
 import re
+import socket
+import subprocess
+from pathlib import Path
 from typing import Optional
 
 import yaml
@@ -50,7 +53,6 @@ class KarmaCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self._stored.set_default(servers={}, config_hash=None)
-        self.api = Karma(port=self.port)
 
         self.karma_consumer = KarmaConsumer(self, "dashboard")
         self.container = self.unit.get_container(self._container_name)
@@ -84,14 +86,22 @@ class KarmaCharm(CharmBase):
             port=self._port,
             scheme=lambda: "https" if self.server_cert.cert else "http",
             redirect_https=True,
+            strip_prefix=True,
         )
         self.framework.observe(self.ingress.on.ready, self._handle_ingress)  # pyright: ignore
         self.framework.observe(self.ingress.on.revoked, self._handle_ingress)  # pyright: ignore
+
+        # Assuming FQDN is always part of the SANs DNS.
+        self.api = Karma(
+            f"{'https' if self.server_cert.cert else 'http'}://{socket.getfqdn()}:{self._port}"
+        )
 
     def _handle_ingress(self, _):
         self._common_exit_hook()
 
     def _update_certs(self):
+        ca_cert_path = Path(self.CA_CERT_PATH)
+
         for path in [self.KEY_PATH, self.CERT_PATH, self.CA_CERT_PATH]:
             self.container.remove_path(path, recursive=True)
 
@@ -101,6 +111,10 @@ class KarmaCharm(CharmBase):
                 self.server_cert.ca,
                 make_dirs=True,
             )
+            # Repeat for the charm container. We need it there for grafana client requests.
+            ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
+            ca_cert_path.write_text(self.server_cert.ca)
+
         if self.server_cert.cert and self.server_cert.key:
             self.container.push(
                 self.CERT_PATH,
@@ -115,6 +129,7 @@ class KarmaCharm(CharmBase):
 
         # TODO: Uncomment when we have a rock with update-ca-certificates
         # self.container.exec(["update-ca-certificates", "--fresh"]).wait()
+        subprocess.run(["update-ca-certificates", "--fresh"])
 
     def _on_server_cert_changed(self, event=None):
         self._common_exit_hook()
@@ -149,9 +164,6 @@ class KarmaCharm(CharmBase):
     def _update_config(self) -> bool:
         """Update the karma yml config file to reflect changes in configuration.
 
-        Args:
-          None
-
         Returns:
           True if config changed; False otherwise
         """
@@ -160,7 +172,8 @@ class KarmaCharm(CharmBase):
         # TODO: Drop this for loop when we have a rock with update-ca-certificates
         #  Until then, we need the "ca" entry.
         for am in alertmanagers:
-            am["tls"] = {"ca": self.CA_CERT_PATH}
+            if self.server_cert.cert:
+                am["tls"] = {"ca": self.CA_CERT_PATH}
 
         config = {
             "alertmanager": {"servers": alertmanagers},

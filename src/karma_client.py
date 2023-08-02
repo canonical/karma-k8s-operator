@@ -21,23 +21,22 @@ class Karma:
     """Karma HTTP API client.
 
     A typical usage example would be:
-    >>> api = Karma("localhost", 8080)
+    >>> api = Karma("http://localhost:8080")
     >>> version = api.version if api.healthy else None
 
     Attributes:
         base_url: address, including scheme and port, of the server.
     """
 
-    def __init__(self, address: str = "localhost", port: int = 8080, timeout=2.0):
+    def __init__(self, endpoint_url: str = "http://localhost:8080", timeout=2.0):
         """Inits Karma.
 
         Args:
-            address: address of karma server, without scheme or port
-            port: karma server api port
+            endpoint_url: URL of karma server, including scheme and port
             timeout: duration, in seconds, after which requests would return regardless of
             response.
         """
-        self.base_url = f"http://{address}:{port}/"
+        self.base_url = endpoint_url.rstrip("/")
         self.timeout = timeout
 
     @staticmethod
@@ -64,7 +63,7 @@ class Karma:
     @property
     def healthy(self) -> bool:
         """Check that the Karma web port is listening."""
-        url = urllib.parse.urljoin(self.base_url, "/health")
+        url = f"{self.base_url}/health"
         try:
             return bool(self._get(url, timeout=self.timeout))
         except KarmaBadResponse:
@@ -80,7 +79,7 @@ class Karma:
               "golang": "go1.16.7"
             }
         """
-        url = urllib.parse.urljoin(self.base_url, "/version")
+        url = f"{self.base_url}/version"
 
         try:
             version_info = json.loads(self._get(url, timeout=self.timeout))
