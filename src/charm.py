@@ -91,9 +91,6 @@ class KarmaCharm(CharmBase):
         self.framework.observe(self.ingress.on.ready, self._handle_ingress)  # pyright: ignore
         self.framework.observe(self.ingress.on.revoked, self._handle_ingress)  # pyright: ignore
 
-        # Assuming FQDN is always part of the SANs DNS.
-        self.api = Karma(self._internal_url)
-
         self.catalog = CatalogueConsumer(
             charm=self,
             refresh_event=[
@@ -343,13 +340,17 @@ class KarmaCharm(CharmBase):
 
         self.container.restart(self._service_name)
 
+        # Assuming FQDN is always part of the SANs DNS.
+        self.api = Karma(self._internal_url)
         # The `/health` endpoint responds with "Pong" ~1 sec after restart
         for attempt in range(1, 4):
             if self.api.healthy:
                 return True
             sleep(attempt)
 
-        logger.error("Service restarted but karma server does not respond")
+        logger.error(
+            "Service restarted but karma server does not respond well on %s", self.api.base_url
+        )
         return False
 
     def _on_update_status(self, _):
@@ -357,6 +358,9 @@ class KarmaCharm(CharmBase):
 
         Logs list of peers, uptime and version info.
         """
+        # Assuming FQDN is always part of the SANs DNS.
+        self.api = Karma(self._internal_url)
+
         try:
             version = self.api.version
             logger.info("karma %s is up and running", version)
