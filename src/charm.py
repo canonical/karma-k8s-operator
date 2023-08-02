@@ -10,6 +10,7 @@ import re
 import socket
 import subprocess
 from pathlib import Path
+from time import sleep
 from typing import Optional
 
 import yaml
@@ -334,11 +335,14 @@ class KarmaCharm(CharmBase):
 
         self.container.restart(self._service_name)
 
-        if not self.api.healthy:
-            logger.error("Service restarted but karma server does not respond")
-            return False
+        # The `/health` endpoint responds with "Pong" ~1 sec after restart
+        for attempt in range(1, 4):
+            if self.api.healthy:
+                return True
+            sleep(attempt)
 
-        return True
+        logger.error("Service restarted but karma server does not respond")
+        return False
 
     def _on_update_status(self, _):
         """Event handler for UpdateStatusEvent.
