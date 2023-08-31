@@ -158,6 +158,9 @@ class KarmaCharm(CharmBase):
         subprocess.run(["update-ca-certificates", "--fresh"])
 
     def _on_server_cert_changed(self, event=None):
+        self.ingress.provide_ingress_requirements(
+            scheme="https" if self.server_cert.cert else "http", port=self.port
+        )
         self._common_exit_hook()
 
     def _common_exit_hook(self) -> None:
