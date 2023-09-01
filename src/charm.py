@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 from time import sleep
 from typing import Optional
+from urllib.parse import urlparse
 
 import yaml
 from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
@@ -86,7 +87,8 @@ class KarmaCharm(CharmBase):
             port=self._port,
             scheme=lambda: "https" if self.server_cert.cert else "http",
             redirect_https=True,
-            strip_prefix=True,
+            # karma config options do not support reverse proxy with path stripping
+            strip_prefix=False,
         )
         self.framework.observe(self.ingress.on.ready, self._handle_ingress)  # pyright: ignore
         self.framework.observe(self.ingress.on.revoked, self._handle_ingress)  # pyright: ignore
@@ -158,6 +160,9 @@ class KarmaCharm(CharmBase):
         subprocess.run(["update-ca-certificates", "--fresh"])
 
     def _on_server_cert_changed(self, event=None):
+        self.ingress.provide_ingress_requirements(
+            scheme="https" if self.server_cert.cert else "http", port=self.port
+        )
         self._common_exit_hook()
 
     def _common_exit_hook(self) -> None:
@@ -201,9 +206,11 @@ class KarmaCharm(CharmBase):
             if self.server_cert.cert:
                 am["tls"] = {"ca": self.CA_CERT_PATH}
 
+        prefix = urlparse(self._external_url).path.strip("/")
         config = {
             "alertmanager": {"servers": alertmanagers},
             "listen": {
+                "prefix": f"/{prefix}/" if prefix else "/",
                 "port": self.port,
                 # The TLS section is allowed to have empty entries
                 # https://github.com/prymitive/karma/blob/main/docs/CONFIGURATION.md#listen
