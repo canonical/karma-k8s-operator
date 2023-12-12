@@ -287,7 +287,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.x509.extensions import Extension, ExtensionNotFound
-from jsonschema import exceptions, validate  # type: ignore[import]
+from jsonschema import exceptions, validate  # type: ignore[import-untyped]
 from ops.charm import (
     CharmBase,
     CharmEvents,
@@ -298,7 +298,7 @@ from ops.charm import (
 )
 from ops.framework import EventBase, EventSource, Handle, Object
 from ops.jujuversion import JujuVersion
-from ops.model import SecretNotFoundError
+from ops.model import ModelError, Relation, RelationDataContent, SecretNotFoundError
 
 # The unique Charmhub library identifier, never change it
 LIBID = "afd8c2bccf834997afce12c2706d2ede"
@@ -308,7 +308,7 @@ LIBAPI = 2
 
 # Increment this PATCH version before using `charmcraft publish-lib` or reset
 # to 0 if you are raising the major API version
-LIBPATCH = 11
+LIBPATCH = 20
 
 PYDEPS = ["cryptography", "jsonschema"]
 
@@ -335,7 +335,10 @@ REQUIRER_JSON_SCHEMA = {
             "type": "array",
             "items": {
                 "type": "object",
-                "properties": {"certificate_signing_request": {"type": "string"}},
+                "properties": {
+                    "certificate_signing_request": {"type": "string"},
+                    "ca": {"type": "boolean"},
+                },
                 "required": ["certificate_signing_request"],
             },
         }
@@ -536,22 +539,31 @@ class AllCertificatesInvalidatedEvent(EventBase):
 class CertificateCreationRequestEvent(EventBase):
     """Charm Event triggered when a TLS certificate is required."""
 
-    def __init__(self, handle: Handle, certificate_signing_request: str, relation_id: int):
+    def __init__(
+        self,
+        handle: Handle,
+        certificate_signing_request: str,
+        relation_id: int,
+        is_ca: bool = False,
+    ):
         super().__init__(handle)
         self.certificate_signing_request = certificate_signing_request
         self.relation_id = relation_id
+        self.is_ca = is_ca
 
     def snapshot(self) -> dict:
         """Returns snapshot."""
         return {
             "certificate_signing_request": self.certificate_signing_request,
             "relation_id": self.relation_id,
+            "is_ca": self.is_ca,
         }
 
     def restore(self, snapshot: dict):
         """Restores snapshot."""
         self.certificate_signing_request = snapshot["certificate_signing_request"]
         self.relation_id = snapshot["relation_id"]
+        self.is_ca = snapshot["is_ca"]
 
 
 class CertificateRevocationRequestEvent(EventBase):
@@ -588,23 +600,26 @@ class CertificateRevocationRequestEvent(EventBase):
         self.chain = snapshot["chain"]
 
 
-def _load_relation_data(raw_relation_data: dict) -> dict:
+def _load_relation_data(relation_data_content: RelationDataContent) -> dict:
     """Loads relation data from the relation data bag.
 
     Json loads all data.
 
     Args:
-        raw_relation_data: Relation data from the databag
+        relation_data_content: Relation data from the databag
 
     Returns:
         dict: Relation data in dict format.
     """
     certificate_data = dict()
-    for key in raw_relation_data:
-        try:
-            certificate_data[key] = json.loads(raw_relation_data[key])
-        except (json.decoder.JSONDecodeError, TypeError):
-            certificate_data[key] = raw_relation_data[key]
+    try:
+        for key in relation_data_content:
+            try:
+                certificate_data[key] = json.loads(relation_data_content[key])
+            except (json.decoder.JSONDecodeError, TypeError):
+                certificate_data[key] = relation_data_content[key]
+    except ModelError:
+        pass
     return certificate_data
 
 
@@ -640,6 +655,17 @@ def generate_ca(
         private_key_object.public_key()  # type: ignore[arg-type]
     )
     subject_identifier = key_identifier = subject_identifier_object.public_bytes()
+    key_usage = x509.KeyUsage(
+        digital_signature=True,
+        key_encipherment=True,
+        key_cert_sign=True,
+        key_agreement=False,
+        content_commitment=False,
+        data_encipherment=False,
+        crl_sign=False,
+        encipher_only=False,
+        decipher_only=False,
+    )
     cert = (
         x509.CertificateBuilder()
         .subject_name(subject)
@@ -657,6 +683,7 @@ def generate_ca(
             ),
             critical=False,
         )
+        .add_extension(key_usage, critical=True)
         .add_extension(
             x509.BasicConstraints(ca=True, path_length=None),
             critical=True,
@@ -673,6 +700,7 @@ def generate_certificate(
     ca_key_password: Optional[bytes] = None,
     validity: int = 365,
     alt_names: Optional[List[str]] = None,
+    is_ca: bool = False,
 ) -> bytes:
     """Generates a TLS certificate based on a CSR.
 
@@ -683,13 +711,15 @@ def generate_certificate(
         ca_key_password: CA private key password
         validity (int): Certificate validity (in days)
         alt_names (list): List of alt names to put on cert - prefer putting SANs in CSR
+        is_ca (bool): Whether the certificate is a CA certificate
 
     Returns:
         bytes: Certificate
     """
     csr_object = x509.load_pem_x509_csr(csr)
     subject = csr_object.subject
-    issuer = x509.load_pem_x509_certificate(ca).issuer
+    ca_pem = x509.load_pem_x509_certificate(ca)
+    issuer = ca_pem.issuer
     private_key = serialization.load_pem_private_key(ca_key, password=ca_key_password)
 
     certificate_builder = (
@@ -700,6 +730,19 @@ def generate_certificate(
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.utcnow())
         .not_valid_after(datetime.utcnow() + timedelta(days=validity))
+        .add_extension(
+            x509.AuthorityKeyIdentifier(
+                key_identifier=ca_pem.extensions.get_extension_for_class(
+                    x509.SubjectKeyIdentifier
+                ).value.key_identifier,
+                authority_cert_issuer=None,
+                authority_cert_serial_number=None,
+            ),
+            critical=False,
+        )
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(csr_object.public_key()), critical=False
+        )
     )
 
     extensions_list = csr_object.extensions
@@ -730,6 +773,30 @@ def generate_certificate(
             extension.value,
             critical=extension.critical,
         )
+
+    if is_ca:
+        certificate_builder = certificate_builder.add_extension(
+            x509.BasicConstraints(ca=True, path_length=None), critical=True
+        )
+        certificate_builder = certificate_builder.add_extension(
+            x509.KeyUsage(
+                digital_signature=False,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=True,
+                crl_sign=True,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+    else:
+        certificate_builder = certificate_builder.add_extension(
+            x509.BasicConstraints(ca=False, path_length=None), critical=False
+        )
+
     certificate_builder._version = x509.Version.v3
     cert = certificate_builder.sign(private_key, hashes.SHA256())  # type: ignore[arg-type]
     return cert.public_bytes(serialization.Encoding.PEM)
@@ -827,7 +894,7 @@ def generate_csr(
         sans_oid (list): List of registered ID SANs
         sans_dns (list): List of DNS subject alternative names (similar to the arg: sans)
         sans_ip (list): List of IP subject alternative names
-        additional_critical_extensions (list): List if critical additional extension objects.
+        additional_critical_extensions (list): List of critical additional extension objects.
             Object must be a x509 ExtensionType.
 
     Returns:
@@ -897,6 +964,22 @@ class TLSCertificatesProvidesV2(Object):
         self.charm = charm
         self.relationship_name = relationship_name
 
+    def _load_app_relation_data(self, relation: Relation) -> dict:
+        """Loads relation data from the application relation data bag.
+
+        Json loads all data.
+
+        Args:
+            relation_object: Relation data from the application databag
+
+        Returns:
+            dict: Relation data in dict format.
+        """
+        # If unit is not leader, it does not try to reach relation data.
+        if not self.model.unit.is_leader():
+            return {}
+        return _load_relation_data(relation.data[self.charm.app])
+
     def _add_certificate(
         self,
         relation_id: int,
@@ -931,7 +1014,7 @@ class TLSCertificatesProvidesV2(Object):
             "ca": ca,
             "chain": chain,
         }
-        provider_relation_data = _load_relation_data(relation.data[self.charm.app])
+        provider_relation_data = self._load_app_relation_data(relation)
         provider_certificates = provider_relation_data.get("certificates", [])
         certificates = copy.deepcopy(provider_certificates)
         if new_certificate in certificates:
@@ -964,7 +1047,7 @@ class TLSCertificatesProvidesV2(Object):
             raise RuntimeError(
                 f"Relation {self.relationship_name} with relation id {relation_id} does not exist"
             )
-        provider_relation_data = _load_relation_data(relation.data[self.charm.app])
+        provider_relation_data = self._load_app_relation_data(relation)
         provider_certificates = provider_relation_data.get("certificates", [])
         certificates = copy.deepcopy(provider_certificates)
         for certificate_dict in certificates:
@@ -999,7 +1082,7 @@ class TLSCertificatesProvidesV2(Object):
         This method is meant to be used when the Root CA has changed.
         """
         for relation in self.model.relations[self.relationship_name]:
-            provider_relation_data = _load_relation_data(relation.data[self.charm.app])
+            provider_relation_data = self._load_app_relation_data(relation)
             provider_certificates = copy.deepcopy(provider_relation_data.get("certificates", []))
             for certificate in provider_certificates:
                 certificate["revoked"] = True
@@ -1081,7 +1164,7 @@ class TLSCertificatesProvidesV2(Object):
             else self.model.relations.get(self.relationship_name, [])
         )
         for relation in relations:
-            provider_relation_data = _load_relation_data(relation.data[self.charm.app])
+            provider_relation_data = self._load_app_relation_data(relation)
             provider_certificates = provider_relation_data.get("certificates", [])
 
             certificates[relation.app.name] = []  # type: ignore[union-attr]
@@ -1111,9 +1194,13 @@ class TLSCertificatesProvidesV2(Object):
         Returns:
             None
         """
-        assert event.unit is not None
+        if event.unit is None:
+            logger.error("Relation_changed event does not have a unit.")
+            return
+        if not self.model.unit.is_leader():
+            return
         requirer_relation_data = _load_relation_data(event.relation.data[event.unit])
-        provider_relation_data = _load_relation_data(event.relation.data[self.charm.app])
+        provider_relation_data = self._load_app_relation_data(event.relation)
         if not self._relation_data_is_valid(requirer_relation_data):
             logger.debug("Relation data did not pass JSON Schema validation")
             return
@@ -1123,15 +1210,19 @@ class TLSCertificatesProvidesV2(Object):
             certificate_creation_request["certificate_signing_request"]
             for certificate_creation_request in provider_certificates
         ]
-        requirer_unit_csrs = [
-            certificate_creation_request["certificate_signing_request"]
+        requirer_unit_certificate_requests = [
+            {
+                "csr": certificate_creation_request["certificate_signing_request"],
+                "is_ca": certificate_creation_request.get("ca", False),
+            }
             for certificate_creation_request in requirer_csrs
         ]
-        for certificate_signing_request in requirer_unit_csrs:
-            if certificate_signing_request not in provider_csrs:
+        for certificate_request in requirer_unit_certificate_requests:
+            if certificate_request["csr"] not in provider_csrs:
                 self.on.certificate_creation_request.emit(
-                    certificate_signing_request=certificate_signing_request,
+                    certificate_signing_request=certificate_request["csr"],
                     relation_id=event.relation.id,
+                    is_ca=certificate_request["is_ca"],
                 )
         self._revoke_certificates_for_which_no_csr_exists(relation_id=event.relation.id)
 
@@ -1152,7 +1243,7 @@ class TLSCertificatesProvidesV2(Object):
         )
         if not certificates_relation:
             raise RuntimeError(f"Relation {self.relationship_name} does not exist")
-        provider_relation_data = _load_relation_data(certificates_relation.data[self.charm.app])
+        provider_relation_data = self._load_app_relation_data(certificates_relation)
         list_of_csrs: List[str] = []
         for unit in certificates_relation.units:
             requirer_relation_data = _load_relation_data(certificates_relation.data[unit])
@@ -1169,28 +1260,47 @@ class TLSCertificatesProvidesV2(Object):
                 )
                 self.remove_certificate(certificate=certificate["certificate"])
 
-    def get_requirer_csrs_with_no_certs(
-        self,
+    def get_outstanding_certificate_requests(
+        self, relation_id: Optional[int] = None
     ) -> List[Dict[str, Union[int, str, List[Dict[str, str]]]]]:
-        """Filters the requirer's units csrs.
+        """Returns CSR's for which no certificate has been issued.
 
-        Keeps the ones for which no certificate was provided.
+        Example return: [
+            {
+                "relation_id": 0,
+                "application_name": "tls-certificates-requirer",
+                "unit_name": "tls-certificates-requirer/0",
+                "unit_csrs": [
+                    {
+                        "certificate_signing_request": "-----BEGIN CERTIFICATE REQUEST-----...",
+                        "is_ca": false
+                    }
+                ]
+            }
+        ]
+
+        Args:
+            relation_id (int): Relation id
 
         Returns:
             list: List of dictionaries that contain the unit's csrs
             that don't have a certificate issued.
         """
-        all_unit_csr_mappings = copy.deepcopy(self.get_requirer_csrs())
+        all_unit_csr_mappings = copy.deepcopy(self.get_requirer_csrs(relation_id=relation_id))
+        filtered_all_unit_csr_mappings: List[Dict[str, Union[int, str, List[Dict[str, str]]]]] = []
         for unit_csr_mapping in all_unit_csr_mappings:
+            csrs_without_certs = []
             for csr in unit_csr_mapping["unit_csrs"]:  # type: ignore[union-attr]
-                if self.certificate_issued_for_csr(
+                if not self.certificate_issued_for_csr(
                     app_name=unit_csr_mapping["application_name"],  # type: ignore[arg-type]
                     csr=csr["certificate_signing_request"],  # type: ignore[index]
+                    relation_id=relation_id,
                 ):
-                    unit_csr_mapping["unit_csrs"].remove(csr)  # type: ignore[union-attr, arg-type]
-            if len(unit_csr_mapping["unit_csrs"]) == 0:  # type: ignore[arg-type]
-                all_unit_csr_mappings.remove(unit_csr_mapping)
-        return all_unit_csr_mappings
+                    csrs_without_certs.append(csr)
+            if csrs_without_certs:
+                unit_csr_mapping["unit_csrs"] = csrs_without_certs  # type: ignore[assignment]
+                filtered_all_unit_csr_mappings.append(unit_csr_mapping)
+        return filtered_all_unit_csr_mappings
 
     def get_requirer_csrs(
         self, relation_id: Optional[int] = None
@@ -1231,17 +1341,21 @@ class TLSCertificatesProvidesV2(Object):
                 )
         return unit_csr_mappings
 
-    def certificate_issued_for_csr(self, app_name: str, csr: str) -> bool:
+    def certificate_issued_for_csr(
+        self, app_name: str, csr: str, relation_id: Optional[int]
+    ) -> bool:
         """Checks whether a certificate has been issued for a given CSR.
 
         Args:
             app_name (str): Application name that the CSR belongs to.
             csr (str): Certificate Signing Request.
-
+            relation_id (Optional[int]): Relation ID
         Returns:
             bool: True/False depending on whether a certificate has been issued for the given CSR.
         """
-        issued_certificates_per_csr = self.get_issued_certificates()[app_name]
+        issued_certificates_per_csr = self.get_issued_certificates(relation_id=relation_id)[
+            app_name
+        ]
         for issued_pair in issued_certificates_per_csr:
             if "csr" in issued_pair and issued_pair["csr"] == csr:
                 return csr_matches_certificate(csr, issued_pair["certificate"])
@@ -1283,8 +1397,17 @@ class TLSCertificatesRequiresV2(Object):
             self.framework.observe(charm.on.update_status, self._on_update_status)
 
     @property
-    def _requirer_csrs(self) -> List[Dict[str, str]]:
-        """Returns list of requirer's CSRs from relation data."""
+    def _requirer_csrs(self) -> List[Dict[str, Union[bool, str]]]:
+        """Returns list of requirer's CSRs from relation data.
+
+        Example:
+            [
+                {
+                    "certificate_signing_request": "-----BEGIN CERTIFICATE REQUEST-----...",
+                    "ca": false
+                }
+            ]
+        """
         relation = self.model.get_relation(self.relationship_name)
         if not relation:
             raise RuntimeError(f"Relation {self.relationship_name} does not exist")
@@ -1307,11 +1430,12 @@ class TLSCertificatesRequiresV2(Object):
             return []
         return provider_relation_data.get("certificates", [])
 
-    def _add_requirer_csr(self, csr: str) -> None:
+    def _add_requirer_csr(self, csr: str, is_ca: bool) -> None:
         """Adds CSR to relation data.
 
         Args:
             csr (str): Certificate Signing Request
+            is_ca (bool): Whether the certificate is a CA certificate
 
         Returns:
             None
@@ -1322,7 +1446,10 @@ class TLSCertificatesRequiresV2(Object):
                 f"Relation {self.relationship_name} does not exist - "
                 f"The certificate request can't be completed"
             )
-        new_csr_dict = {"certificate_signing_request": csr}
+        new_csr_dict: Dict[str, Union[bool, str]] = {
+            "certificate_signing_request": csr,
+            "ca": is_ca,
+        }
         if new_csr_dict in self._requirer_csrs:
             logger.info("CSR already in relation data - Doing nothing")
             return
@@ -1346,18 +1473,22 @@ class TLSCertificatesRequiresV2(Object):
                 f"The certificate request can't be completed"
             )
         requirer_csrs = copy.deepcopy(self._requirer_csrs)
-        csr_dict = {"certificate_signing_request": csr}
-        if csr_dict not in requirer_csrs:
-            logger.info("CSR not in relation data - Doing nothing")
+        if not requirer_csrs:
+            logger.info("No CSRs in relation data - Doing nothing")
             return
-        requirer_csrs.remove(csr_dict)
+        for requirer_csr in requirer_csrs:
+            if requirer_csr["certificate_signing_request"] == csr:
+                requirer_csrs.remove(requirer_csr)
         relation.data[self.model.unit]["certificate_signing_requests"] = json.dumps(requirer_csrs)
 
-    def request_certificate_creation(self, certificate_signing_request: bytes) -> None:
+    def request_certificate_creation(
+        self, certificate_signing_request: bytes, is_ca: bool = False
+    ) -> None:
         """Request TLS certificate to provider charm.
 
         Args:
             certificate_signing_request (bytes): Certificate Signing Request
+            is_ca (bool): Whether the certificate is a CA certificate
 
         Returns:
             None
@@ -1368,7 +1499,7 @@ class TLSCertificatesRequiresV2(Object):
                 f"Relation {self.relationship_name} does not exist - "
                 f"The certificate request can't be completed"
             )
-        self._add_requirer_csr(certificate_signing_request.decode().strip())
+        self._add_requirer_csr(certificate_signing_request.decode().strip(), is_ca=is_ca)
         logger.info("Certificate request sent to provider")
 
     def request_certificate_revocation(self, certificate_signing_request: bytes) -> None:
@@ -1647,7 +1778,10 @@ def csr_matches_certificate(csr: str, cert: str) -> bool:
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         ):
             return False
-        if csr_object.subject != cert_object.subject:
+        if (
+            csr_object.public_key().public_numbers().n  # type: ignore[union-attr]
+            != cert_object.public_key().public_numbers().n  # type: ignore[union-attr]
+        ):
             return False
     except ValueError:
         logger.warning("Could not load certificate or CSR.")
