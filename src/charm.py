@@ -218,7 +218,7 @@ class KarmaCharm(CharmBase):
                     # Render non-empty values only if we have a cert. The key is assumed to exist.
                     "cert": self.CERT_PATH if self.server_cert.cert else "",
                     "key": self.KEY_PATH if self.server_cert.cert else "",
-                }
+                },
                 # "cors": {"allowedOrigins": [am["uri"] for am in alertmanagers]},
             },
             "log": {
