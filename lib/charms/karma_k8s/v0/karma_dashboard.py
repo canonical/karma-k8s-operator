@@ -58,9 +58,7 @@ class _KarmaDashboardProviderUnitDataV0(BaseModel):
         json_encoders = {
             # We need this because relation data values must be strings, not <class 'bool'>
             # Note: In pydantic>=2, can use `field_serializer`.
-            bool: lambda v: "true"
-            if v
-            else "false"
+            bool: lambda v: "true" if v else "false"
         }
 
 
