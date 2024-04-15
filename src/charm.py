@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 import yaml
 from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
 from charms.karma_k8s.v0.karma_dashboard import KarmaConsumer
-from charms.observability_libs.v0.cert_handler import CertHandler
+from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from karma_client import Karma, KarmaBadResponse
 from ops.charm import CharmBase
@@ -58,6 +58,7 @@ class KarmaCharm(CharmBase):
 
         self.karma_consumer = KarmaConsumer(self, "dashboard")
         self.container = self.unit.get_container(self._container_name)
+        self.unit.open_port(protocol="tcp", port=self._port)
 
         # Core lifecycle events
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -75,9 +76,9 @@ class KarmaCharm(CharmBase):
             self._on_alertmanager_config_changed,
         )
 
-        self.server_cert = CertHandler(self, key="am-server-cert", peer_relation_name="replicas")
+        self.cert_handler = CertHandler(self, key="am-server-cert")
         self.framework.observe(
-            self.server_cert.on.cert_changed,  # pyright: ignore
+            self.cert_handler.on.cert_changed,  # pyright: ignore
             self._on_server_cert_changed,
         )
 
@@ -85,7 +86,7 @@ class KarmaCharm(CharmBase):
             self,
             "ingress",
             port=self._port,
-            scheme=lambda: "https" if self.server_cert.cert else "http",
+            scheme=lambda: "https" if self.cert_handler.server_cert else "http",
             redirect_https=True,
             # karma config options do not support reverse proxy with path stripping
             strip_prefix=False,
@@ -116,7 +117,7 @@ class KarmaCharm(CharmBase):
     @property
     def _internal_url(self) -> str:
         """Return the fqdn dns-based in-cluster (private) address of the karma api server."""
-        scheme = "https" if self.server_cert.cert else "http"
+        scheme = "https" if self.cert_handler.server_cert else "http"
         return f"{scheme}://{socket.getfqdn()}:{self._port}"
 
     @property
@@ -133,25 +134,25 @@ class KarmaCharm(CharmBase):
         for path in [self.KEY_PATH, self.CERT_PATH, self.CA_CERT_PATH]:
             self.container.remove_path(path, recursive=True)
 
-        if self.server_cert.ca:
+        if self.cert_handler.ca_cert:
             self.container.push(
                 self.CA_CERT_PATH,
-                self.server_cert.ca,
+                self.cert_handler.ca_cert,
                 make_dirs=True,
             )
             # Repeat for the charm container. We need it there for grafana client requests.
             ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
-            ca_cert_path.write_text(self.server_cert.ca)
+            ca_cert_path.write_text(self.cert_handler.ca_cert)
 
-        if self.server_cert.cert and self.server_cert.key:
+        if self.cert_handler.server_cert and self.cert_handler.private_key:
             self.container.push(
                 self.CERT_PATH,
-                self.server_cert.cert,
+                self.cert_handler.server_cert,
                 make_dirs=True,
             )
             self.container.push(
                 self.KEY_PATH,
-                self.server_cert.key,
+                self.cert_handler.private_key,
                 make_dirs=True,
             )
 
@@ -161,7 +162,7 @@ class KarmaCharm(CharmBase):
 
     def _on_server_cert_changed(self, event=None):
         self.ingress.provide_ingress_requirements(
-            scheme="https" if self.server_cert.cert else "http", port=self.port
+            scheme="https" if self.cert_handler.server_cert else "http", port=self.port
         )
         self._common_exit_hook()
 
@@ -203,7 +204,7 @@ class KarmaCharm(CharmBase):
         # TODO: Drop this for loop when we have a rock with update-ca-certificates
         #  Until then, we need the "ca" entry.
         for am in alertmanagers:
-            if self.server_cert.cert:
+            if self.cert_handler.server_cert:
                 am["tls"] = {"ca": self.CA_CERT_PATH}
 
         prefix = urlparse(self._external_url).path.strip("/")
@@ -216,8 +217,8 @@ class KarmaCharm(CharmBase):
                 # https://github.com/prymitive/karma/blob/main/docs/CONFIGURATION.md#listen
                 "tls": {
                     # Render non-empty values only if we have a cert. The key is assumed to exist.
-                    "cert": self.CERT_PATH if self.server_cert.cert else "",
-                    "key": self.KEY_PATH if self.server_cert.cert else "",
+                    "cert": self.CERT_PATH if self.cert_handler.server_cert else "",
+                    "key": self.KEY_PATH if self.cert_handler.server_cert else "",
                 },
                 # "cors": {"allowedOrigins": [am["uri"] for am in alertmanagers]},
             },
