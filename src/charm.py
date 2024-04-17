@@ -58,7 +58,7 @@ class KarmaCharm(CharmBase):
 
         self.karma_consumer = KarmaConsumer(self, "dashboard")
         self.container = self.unit.get_container(self._container_name)
-        self.unit.open_port(protocol="tcp", port=self._port)
+        self.unit.set_ports(self._port)
 
         # Core lifecycle events
         self.framework.observe(self.on.config_changed, self._on_config_changed)
