@@ -349,7 +349,7 @@ class KarmaCharm(CharmBase):
         self.container.restart(self._service_name)
 
         # Assuming FQDN is always part of the SANs DNS.
-        self.api = Karma(self._internal_url)
+        self.api = Karma(self._external_url)
         # The `/health` endpoint responds with "Pong" ~1 sec after restart
         for attempt in range(1, 4):
             if self.api.healthy:
@@ -367,7 +367,7 @@ class KarmaCharm(CharmBase):
         Logs list of peers, uptime and version info.
         """
         # Assuming FQDN is always part of the SANs DNS.
-        self.api = Karma(self._internal_url)
+        self.api = Karma(self._external_url)
 
         try:
             version = self.api.version
