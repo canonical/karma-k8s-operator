@@ -1,22 +1,86 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
-
+name: karma-k8s
 type: charm
-bases:
-  - build-on:
-    - name: "ubuntu"
-      channel: "20.04"
-    run-on:
-    - name: "ubuntu"
-      channel: "20.04"
+summary: Aggregator and alternative UI for Alertmanager.
+description: |
+  Alertmanager UI is useful for browsing alerts and managing silences, but it's
+  lacking as a dashboard tool - karma aims to fill this gap.  This charm deploys
+  and manages Karma in a Kubernetes environment.
+
+links:
+  website: https://charmhub.io/karma-k8s
+  source: https://github.com/canonical/karma-k8s-operator
+  issues: https://github.com/canonical/karma-k8s-operator/issues
+
+platforms:
+  ubuntu@20.04:amd64:
+  ubuntu@24.04:amd64:
+
 parts:
   charm:
-    charm-binary-python-packages:
-    - ops
-    - PyYAML
-    - kubernetes
-    - pydantic
-    - cryptography
-    - jsonschema
-    build-packages:
-    - git
+    source: .
+    plugin: uv
+    build-packages: [git]
+    build-snaps: [astral-uv]
+    override-build: |
+      craftctl default
+      git describe --always > $CRAFT_PART_INSTALL/version
+
+containers:
+  karma:
+    resource: karma-image
+    mounts:
+      # TODO: remove persistent storage for config after private key is moved to juju secrets.
+      - storage: config
+        location: /srv
+
+resources:
+  karma-image:
+    type: oci-image
+    description: OCI image for karma
+    upstream-source: ghcr.io/prymitive/karma:v0.114
+
+storage:
+  config:
+    type: filesystem
+
+requires:
+  ingress:
+    interface: ingress
+    optional: true
+    description: |
+      Integrate with an ingress provider in order to make Karma reachable
+      outside of its model.
+  dashboard:
+    # Requirer's unit data bag should have the following keys:
+    #  - name (e.g. "alertmanager-k8s/0")
+    #  - uri (e.g. "http://1.1.1.1:9093")
+    interface: karma_dashboard
+    optional: true
+    description: |
+      Integrate with charms that provide a set of Alertmanager URLs, to display
+      them in Karma.
+  certificates:
+    interface: tls-certificates
+    optional: true
+    limit: 1
+    description: |
+      Certificate and key files for the karma server to use to authenticate to client.
+  catalogue:
+    interface: catalogue
+    optional: true
+    description: Add Karma as an item to a Catalogue charm.
+
+peers:
+  replicas:
+    interface: karma_replica
+
+config:
+  options:
+    external_hostname:
+      default: ""
+      description: >
+        DEPRECATED; UNUSED. The external hostname this application should be available on. If unset,
+        it will default to the deployed application name in the model.
+      type: string
