@@ -28,7 +28,7 @@ def bundle_under_test(charm_under_test, tls_enabled: bool) -> str:
         applications:
           {karma.name}:
             charm: {charm_under_test}
-            series: focal
+            base: ubuntu@20.04/stable
             scale: {karma.scale}
             trust: true
             resources:
@@ -36,7 +36,7 @@ def bundle_under_test(charm_under_test, tls_enabled: bool) -> str:
           {am.name}:
             charm: {am.charm}
             channel: edge
-            series: focal
+            base: ubuntu@20.04/stable
             scale: {am.scale}
             trust: true
         relations:
@@ -51,7 +51,7 @@ def bundle_under_test(charm_under_test, tls_enabled: bool) -> str:
         applications:
           {karma.name}:
             charm: {charm_under_test}
-            series: focal
+            base: ubuntu@20.04/stable
             scale: {karma.scale}
             trust: true
             resources:
@@ -59,7 +59,7 @@ def bundle_under_test(charm_under_test, tls_enabled: bool) -> str:
           {am.name}:
             charm: {am.charm}
             channel: edge
-            series: focal
+            base: ubuntu@20.04/stable
             scale: {am.scale}
             trust: true
           {ca.name}:
