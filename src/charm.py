@@ -19,12 +19,13 @@ from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
 from charms.karma_k8s.v0.karma_dashboard import KarmaConsumer
 from charms.observability_libs.v1.cert_handler import CertHandler
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
-from karma_client import Karma, KarmaBadResponse
 from ops.charm import CharmBase
 from ops.framework import StoredState
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 from ops.pebble import Layer, PathError
+
+from karma_client import Karma, KarmaBadResponse
 
 logger = logging.getLogger(__name__)
 

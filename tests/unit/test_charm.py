@@ -5,9 +5,10 @@ import shutil
 import tempfile
 import unittest
 
-from charm import KarmaCharm
 from ops.model import ActiveStatus
 from ops.testing import Harness
+
+from charm import KarmaCharm
 
 
 class TestCharm(unittest.TestCase):

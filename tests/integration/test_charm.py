@@ -13,7 +13,7 @@ from helpers import deploy_literal_bundle
 
 logger = logging.getLogger(__name__)
 
-METADATA = yaml.safe_load(Path("./metadata.yaml").read_text())
+METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 
 am = SimpleNamespace(name="am", charm="alertmanager-k8s", scale=1)
 ca = SimpleNamespace(name="ca", charm="self-signed-certificates", scale=1)
