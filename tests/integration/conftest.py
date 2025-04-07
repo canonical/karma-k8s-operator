@@ -4,6 +4,7 @@
 
 import functools
 import logging
+import os
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -56,6 +57,8 @@ def timed_memoizer(func):
 @timed_memoizer
 async def charm_under_test(ops_test: OpsTest) -> Optional[Path]:
     """Charm used for integration testing."""
-    path_to_built_charm = await ops_test.build_charm(".")
+    if charm_file := os.environ.get("CHARM_PATH"):
+        return Path(charm_file)
 
+    path_to_built_charm = await ops_test.build_charm(".")
     return path_to_built_charm
