@@ -1,5 +1,36 @@
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
+[project]
+name = "avalanche-k8s"
+version = "0.0"
+requires-python = "~=3.8"
+
+dependencies = [
+  "ops",
+  "lightkube>=0.11",
+  "lightkube-models",
+  "cryptography",
+  "jsonschema",
+  "pydantic<2",
+  "kubernetes",
+  "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = [
+  # Linting
+  "ruff",
+  "codespell",
+  # Static
+  "pyright",
+  # Unit
+  "pytest",
+  "coverage[toml]",
+  # Integration
+  "juju",
+  "pytest-operator",
+  "sh",
+]
 
 # Testing tools configuration
 [tool.coverage.run]
@@ -8,23 +39,18 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 
-# Formatting tools configuration
-[tool.black]
-line-length = 99
-target-version = ["py38"]
-
 # Linting tools configuration
 [tool.ruff]
 line-length = 99
 exclude = ["__pycache__", "*.egg_info"]
-select = ["E", "W", "F", "C", "N", "R", "D", "I001"]
+lint.select = ["E", "W", "F", "C", "N", "R", "D", "I001"]
 # Ignore E501 because using black creates errors with this
 # Ignore D107 Missing docstring in __init__
-ignore = ["E501", "D107", "N818", "RET504"]
+lint.ignore = ["E501", "D107", "N818", "RET504"]
 # D100, D101, D102, D103: Ignore missing docstrings in tests
-per-file-ignores = {"tests/*" = ["D100","D101","D102","D103"]}
+lint.per-file-ignores = {"tests/*" = ["D100","D101","D102","D103"]}
 
-[tool.ruff.pydocstyle]
+[tool.ruff.lint.pydocstyle]
 convention = "google"
 
 # Static analysis tools configuration
@@ -37,3 +63,8 @@ pythonPlatform = "All"
 minversion = "6.0"
 log_cli_level = "INFO"
 asyncio_mode = "auto"
+addopts = "--tb=native --verbose --capture=no --log-cli-level=INFO"
+
+[tool.codespell]
+skip = ".git,.tox,build,venv*"
+ignore-words-list = "assertIn"
