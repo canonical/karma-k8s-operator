@@ -4,80 +4,43 @@
 import asyncio
 import logging
 from pathlib import Path
-from textwrap import dedent
-from types import SimpleNamespace
 
 import pytest
+import sh
 import yaml
-from helpers import deploy_literal_bundle
+
+# pyright: reportAttributeAccessIssue = false
 
 logger = logging.getLogger(__name__)
 
 METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 
-am = SimpleNamespace(name="am", charm="alertmanager-k8s", scale=1)
-ca = SimpleNamespace(name="ca", charm="self-signed-certificates", scale=1)
-karma = SimpleNamespace(name="karma", scale=1)
-
-
-def bundle_under_test(charm_under_test, tls_enabled: bool) -> str:
-    without_tls = dedent(
-        f"""
-        ---
-        bundle: kubernetes
-        applications:
-          {karma.name}:
-            charm: {charm_under_test}
-            scale: {karma.scale}
-            trust: true
-            resources:
-              karma-image: {METADATA["resources"]["karma-image"]["upstream-source"]}
-          {am.name}:
-            charm: {am.charm}
-            channel: 2/edge
-            scale: {am.scale}
-            trust: true
-        relations:
-        - [{karma.name}:dashboard, {am.name}:karma-dashboard]
-        """
-    )
-
-    with_tls = dedent(
-        f"""
-        ---
-        bundle: kubernetes
-        applications:
-          {karma.name}:
-            charm: {charm_under_test}
-            scale: {karma.scale}
-            trust: true
-            resources:
-              karma-image: {METADATA["resources"]["karma-image"]["upstream-source"]}
-          {am.name}:
-            charm: {am.charm}
-            channel: 2/edge
-            scale: {am.scale}
-            trust: true
-          {ca.name}:
-            charm: {ca.charm}
-            channel: edge
-            scale: {ca.scale}
-        relations:
-        - [{am.name}:certificates, {ca.name}:certificates]
-        - [{karma.name}:certificates, {ca.name}:certificates]
-        - [{karma.name}:dashboard, {am.name}:karma-dashboard]
-        """
-    )
-
-    return with_tls if tls_enabled else without_tls
+karma_image_rev = METADATA["resources"]["karma-image"]["upstream-source"]
 
 
 @pytest.mark.parametrize("tls_enabled", [False, True], scope="module")
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test, charm_under_test, tls_enabled):
     """Deploy the charm-under-test and deploy it together with related charms."""
+    assert ops_test.model
     # GIVEN a karma bundle
-    await deploy_literal_bundle(ops_test, bundle_under_test(charm_under_test, tls_enabled))
+    sh.juju.deploy(
+        charm_under_test,
+        "karma",
+        model=ops_test.model.name,
+        resource=f"karma-image={karma_image_rev}",
+        trust=True,
+    )
+    sh.juju.deploy(
+        "alertmanager-k8s", "alertmanager", model=ops_test.model.name, channel="2/edge", trust=True
+    )
+    sh.juju.relate("karma:dashboard", "alertmanager", model=ops_test.model.name)
+    if tls_enabled:
+        sh.juju.deploy("self-signed-certificates", model=ops_test.model.name, channel="edge")
+        sh.juju.relate("karma:certificates", "self-signed-certificates", model=ops_test.model.name)
+        sh.juju.relate(
+            "alertmanager:certificates", "self-signed-certificates", model=ops_test.model.name
+        )
 
     # WHEN the deployment is settled
     # THEN all apps are in active/idle
