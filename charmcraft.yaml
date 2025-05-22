@@ -14,7 +14,7 @@ links:
   issues: https://github.com/canonical/karma-k8s-operator/issues
 
 platforms:
-  ubuntu@20.04:amd64:
+  ubuntu@24.04:amd64:
 
 parts:
   charm:
