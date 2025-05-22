@@ -28,15 +28,13 @@ def bundle_under_test(charm_under_test, tls_enabled: bool) -> str:
         applications:
           {karma.name}:
             charm: {charm_under_test}
-            base: ubuntu@20.04/stable
             scale: {karma.scale}
             trust: true
             resources:
               karma-image: {METADATA["resources"]["karma-image"]["upstream-source"]}
           {am.name}:
             charm: {am.charm}
-            channel: edge
-            base: ubuntu@20.04/stable
+            channel: 2/edge
             scale: {am.scale}
             trust: true
         relations:
@@ -51,15 +49,13 @@ def bundle_under_test(charm_under_test, tls_enabled: bool) -> str:
         applications:
           {karma.name}:
             charm: {charm_under_test}
-            base: ubuntu@20.04/stable
             scale: {karma.scale}
             trust: true
             resources:
               karma-image: {METADATA["resources"]["karma-image"]["upstream-source"]}
           {am.name}:
             charm: {am.charm}
-            channel: edge
-            base: ubuntu@20.04/stable
+            channel: 2/edge
             scale: {am.scale}
             trust: true
           {ca.name}:
