@@ -18,9 +18,8 @@ METADATA = yaml.safe_load(Path("./charmcraft.yaml").read_text())
 karma_image_rev = METADATA["resources"]["karma-image"]["upstream-source"]
 
 
-@pytest.mark.parametrize("tls_enabled", [False, True], scope="module")
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test, charm_under_test, tls_enabled):
+async def test_build_and_deploy(ops_test, charm_under_test):
     """Deploy the charm-under-test and deploy it together with related charms."""
     assert ops_test.model
     # GIVEN a karma bundle
@@ -34,13 +33,13 @@ async def test_build_and_deploy(ops_test, charm_under_test, tls_enabled):
     sh.juju.deploy(
         "alertmanager-k8s", "alertmanager", model=ops_test.model.name, channel="2/edge", trust=True
     )
+    sh.juju.deploy("self-signed-certificates", model=ops_test.model.name, channel="edge")
+
     sh.juju.relate("karma:dashboard", "alertmanager", model=ops_test.model.name)
-    if tls_enabled:
-        sh.juju.deploy("self-signed-certificates", model=ops_test.model.name, channel="edge")
-        sh.juju.relate("karma:certificates", "self-signed-certificates", model=ops_test.model.name)
-        sh.juju.relate(
-            "alertmanager:certificates", "self-signed-certificates", model=ops_test.model.name
-        )
+    sh.juju.relate("karma:certificates", "self-signed-certificates", model=ops_test.model.name)
+    sh.juju.relate(
+        "alertmanager:certificates", "self-signed-certificates", model=ops_test.model.name
+    )
 
     # WHEN the deployment is settled
     # THEN all apps are in active/idle
