@@ -104,7 +104,7 @@ class KarmaCharm(CharmBase):
 
         self.framework.observe(
             self._cert_requirer.on.certificate_available,  # pyright: ignore
-            self._on_server_cert_changed,
+            self._on_certificate_available,
         )
 
         self.ingress = IngressPerAppRequirer(
@@ -186,7 +186,7 @@ class KarmaCharm(CharmBase):
         # self.container.exec(["update-ca-certificates", "--fresh"]).wait()
         subprocess.run(["update-ca-certificates", "--fresh"])
 
-    def _on_server_cert_changed(self, event=None):
+    def _on_certificate_available(self, _=None):
         self.ingress.provide_ingress_requirements(
             scheme="https" if self._tls_available else "http", port=self.port
         )
