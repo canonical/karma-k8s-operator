@@ -325,7 +325,7 @@ class KarmaCharm(CharmBase):
             else:
                 self._stored.config_hash = sha256(yaml.safe_dump(yaml.safe_load(config)))
 
-        self._on_server_cert_changed(None)
+        self._on_certificate_available(None)
 
         # After upgrade (refresh), the unit ip address is not guaranteed to remain the same, and
         # the config may need update. Calling the common hook to update.
