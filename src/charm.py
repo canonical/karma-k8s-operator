@@ -9,6 +9,7 @@ import logging
 import re
 import socket
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from time import sleep
 from typing import Optional
@@ -17,7 +18,10 @@ from urllib.parse import urlparse
 import yaml
 from charms.catalogue_k8s.v0.catalogue import CatalogueConsumer, CatalogueItem
 from charms.karma_k8s.v0.karma_dashboard import KarmaConsumer
-from charms.observability_libs.v1.cert_handler import CertHandler
+from charms.tls_certificates_interface.v4.tls_certificates import (
+    CertificateRequestAttributes,
+    TLSCertificatesRequiresV4,
+)
 from charms.traefik_k8s.v2.ingress import IngressPerAppRequirer
 from ops.charm import CharmBase
 from ops.framework import StoredState
@@ -36,6 +40,13 @@ def sha256(hashable) -> str:
         hashable = hashable.encode("utf-8")
     return hashlib.sha256(hashable).hexdigest()
 
+@dataclass
+class TLSConfig:
+    """TLS configuration received by the charm over the `certificates` relation."""
+
+    server_cert: str
+    ca_cert: str
+    private_key: str
 
 class KarmaCharm(CharmBase):
     """A Juju charm for Karma."""
@@ -55,6 +66,7 @@ class KarmaCharm(CharmBase):
 
     def __init__(self, *args):
         super().__init__(*args)
+        self._fqdn = socket.getfqdn()
         self._stored.set_default(servers={}, config_hash=None)
 
         self.karma_consumer = KarmaConsumer(self, "dashboard")
@@ -77,17 +89,29 @@ class KarmaCharm(CharmBase):
             self._on_alertmanager_config_changed,
         )
 
-        self.cert_handler = CertHandler(self, key="am-server-cert")
+        self._csr_attributes = CertificateRequestAttributes(
+            # the `common_name` field is required but limited to 64 characters.
+            # since it's overridden by sans, we can use a short,
+            # constrained value like app name.
+            common_name=self.app.name,
+            sans_dns=frozenset((self._fqdn,)),
+        )
+        self._cert_requirer = TLSCertificatesRequiresV4(
+            charm=self,
+            relationship_name="certificates",
+            certificate_requests=[self._csr_attributes],
+        )
+
         self.framework.observe(
-            self.cert_handler.on.cert_changed,  # pyright: ignore
-            self._on_server_cert_changed,
+            self._cert_requirer.on.certificate_available,  # pyright: ignore
+            self._on_certificate_available,
         )
 
         self.ingress = IngressPerAppRequirer(
             self,
             "ingress",
             port=self._port,
-            scheme=lambda: "https" if self.cert_handler.server_cert else "http",
+            scheme=lambda: "https" if self._tls_available else "http",
             redirect_https=True,
             # karma config options do not support reverse proxy with path stripping
             strip_prefix=False,
@@ -118,8 +142,8 @@ class KarmaCharm(CharmBase):
     @property
     def _internal_url(self) -> str:
         """Return the fqdn dns-based in-cluster (private) address of the karma api server."""
-        scheme = "https" if self.cert_handler.server_cert else "http"
-        return f"{scheme}://{socket.getfqdn()}:{self._port}"
+        scheme = "https" if self._tls_available else "http"
+        return f"{scheme}://{self._fqdn}:{self._port}"
 
     @property
     def _external_url(self) -> str:
@@ -131,39 +155,40 @@ class KarmaCharm(CharmBase):
 
     def _update_certs(self):
         ca_cert_path = Path(self.CA_CERT_PATH)
-
-        for path in [self.KEY_PATH, self.CERT_PATH, self.CA_CERT_PATH]:
-            self.container.remove_path(path, recursive=True)
-
-        if self.cert_handler.ca_cert:
+        if tls_config := self._tls_config:
             self.container.push(
                 self.CA_CERT_PATH,
-                self.cert_handler.ca_cert,
+                tls_config.ca_cert,
                 make_dirs=True,
             )
             # Repeat for the charm container. We need it there for grafana client requests.
             ca_cert_path.parent.mkdir(exist_ok=True, parents=True)
-            ca_cert_path.write_text(self.cert_handler.ca_cert)
+            ca_cert_path.write_text(tls_config.ca_cert)
 
-        if self.cert_handler.server_cert and self.cert_handler.private_key:
             self.container.push(
                 self.CERT_PATH,
-                self.cert_handler.server_cert,
+                tls_config.server_cert,
                 make_dirs=True,
             )
             self.container.push(
                 self.KEY_PATH,
-                self.cert_handler.private_key,
+                tls_config.private_key,
                 make_dirs=True,
             )
+
+        else:
+            for path in [self.KEY_PATH, self.CERT_PATH, self.CA_CERT_PATH]:
+                self.container.remove_path(path, recursive=True)
+            # Repeat for the charm container.
+            ca_cert_path.unlink(missing_ok=True)
 
         # TODO: Uncomment when we have a rock with update-ca-certificates
         # self.container.exec(["update-ca-certificates", "--fresh"]).wait()
         subprocess.run(["update-ca-certificates", "--fresh"])
 
-    def _on_server_cert_changed(self, event=None):
+    def _on_certificate_available(self, _=None):
         self.ingress.provide_ingress_requirements(
-            scheme="https" if self.cert_handler.server_cert else "http", port=self.port
+            scheme="https" if self._tls_available else "http", port=self.port
         )
         self._common_exit_hook()
 
@@ -201,11 +226,12 @@ class KarmaCharm(CharmBase):
           True if config changed; False otherwise
         """
         alertmanagers = self.karma_consumer.get_alertmanager_servers()
+        tls_available = self._tls_available
 
         # TODO: Drop this for loop when we have a rock with update-ca-certificates
         #  Until then, we need the "ca" entry.
         for am in alertmanagers:
-            if self.cert_handler.server_cert:
+            if tls_available:
                 am["tls"] = {"ca": self.CA_CERT_PATH}
 
         prefix = urlparse(self._external_url).path.strip("/")
@@ -218,8 +244,8 @@ class KarmaCharm(CharmBase):
                 # https://github.com/prymitive/karma/blob/main/docs/CONFIGURATION.md#listen
                 "tls": {
                     # Render non-empty values only if we have a cert. The key is assumed to exist.
-                    "cert": self.CERT_PATH if self.cert_handler.server_cert else "",
-                    "key": self.KEY_PATH if self.cert_handler.server_cert else "",
+                    "cert": self.CERT_PATH if tls_available else "",
+                    "key": self.KEY_PATH if tls_available else "",
                 },
                 # "cors": {"allowedOrigins": [am["uri"] for am in alertmanagers]},
             },
@@ -299,7 +325,7 @@ class KarmaCharm(CharmBase):
             else:
                 self._stored.config_hash = sha256(yaml.safe_dump(yaml.safe_load(config)))
 
-        self._on_server_cert_changed(None)
+        self._on_certificate_available(None)
 
         # After upgrade (refresh), the unit ip address is not guaranteed to remain the same, and
         # the config may need update. Calling the common hook to update.
@@ -389,6 +415,19 @@ class KarmaCharm(CharmBase):
             return None
         return result.group(1)
 
+
+    @property
+    def _tls_config(self) -> Optional[TLSConfig]:
+        certificates, key = self._cert_requirer.get_assigned_certificate(
+            certificate_request=self._csr_attributes
+        )
+        if not (key and certificates):
+            return None
+        return TLSConfig(certificates.certificate.raw, certificates.ca.raw, key.raw)
+
+    @property
+    def _tls_available(self) -> bool:
+        return bool(self._tls_config)
 
 if __name__ == "__main__":
     main(KarmaCharm)
