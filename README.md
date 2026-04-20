@@ -1,7 +1,7 @@
 # Karma Operator (k8s)
 
-# 🚧 Deprecation Notice 🚧
-> **The Karma K8s Operator charm is deprecated and this repository will be archived.** This charm is no longer under active development and there will be no further updates.
+# 🚧 Notice 🚧
+> This charm is no longer under active development and there will be no further updates.
 
 [![CharmHub Badge](https://charmhub.io/karma-k8s/badge.svg)](https://charmhub.io/karma-k8s)
 [![Release](https://github.com/canonical/karma-k8s-operator/actions/workflows/release.yaml/badge.svg)](https://github.com/canonical/karma-k8s-operator/actions/workflows/release.yaml)
